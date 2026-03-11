@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from core.model_runtime import load_model_module
+from core.utils.model_runtime import load_model_module
 from llms.call_structured import call_structured_llm
 from llms.predictor.context import build_context
-from core.prediction_time import parse_iso_to_utc, prediction_bounds_utc
+from core.utils.prediction_time import parse_iso_to_utc, prediction_bounds_utc
 from core.schemas import ModelRow, PredictionLabel, PredictionResponse, PredictionRow, Settings
-from smartpy.utility.log_util import getLogger
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _get_price_at_or_before(prices: list[dict[str, str]], ticker: str, ts: datetime) -> float | None:

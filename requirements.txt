@@ -1,6 +1,5 @@
 litellm
 matplotlib
-smartpy
 pydantic
 PyYAML
 python-dotenv

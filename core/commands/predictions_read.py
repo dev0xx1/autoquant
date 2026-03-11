@@ -4,7 +4,7 @@ from typing import Any
 
 from core.constants import PREDICTIONS_CSV
 from core.paths import run_dir
-from core.storage import parse_prediction_rows, read_csv
+from core.utils.storage import parse_prediction_rows, read_csv
 
 
 def predictions_read(run_id: str, model_id: str | None = None, date_from: str | None = None, date_to: str | None = None) -> list[dict[str, Any]]:

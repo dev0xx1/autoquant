@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from core.prediction_time import parse_iso_to_utc, prediction_bounds_utc
+from core.utils.prediction_time import parse_iso_to_utc, prediction_bounds_utc
 from core.schemas import Settings
 
 

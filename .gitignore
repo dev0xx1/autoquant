@@ -2,6 +2,7 @@
 .envrc
 .venv
 venv/
+.autoquantvenv/
 __pycache__/
 *.py[cod]
 *.pyo

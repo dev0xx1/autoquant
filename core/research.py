@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from smartpy.utility.log_util import getLogger
-
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 from llms import get_actual_label, predict_one_day
 from core.schemas import ExperimentRow, ModelRow, PredictionLabel, PredictionRow, Settings
@@ -21,7 +20,7 @@ from core.constants import (
     NEWS_CSV,
 )
 from core.graph import update_model_objective
-from core.storage import (
+from core.utils.storage import (
     get_model_map,
     get_model_rows,
     parse_experiment_rows,
@@ -30,7 +29,7 @@ from core.storage import (
     to_dict_rows,
     upsert_csv,
 )
-from core.time_utils import day_iter, now_utc
+from core.utils.time_utils import day_iter, now_utc
 
 
 def _safe_div(num: float, den: float) -> float:
@@ -105,77 +104,91 @@ async def _predict_missing_rows(
 
 def run_experiment(base_dir: Path, settings: Settings, exp: ExperimentRow) -> None:
     logger.info("Experiment start model=%s ticker=%s range=%s..%s", exp.model_id, exp.ticker, exp.from_date, exp.to_date)
+    exp.status = "running"
+    exp.started_at_utc = now_utc()
+    exp.finished_at_utc = None
+    exp.error = None
+    upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
     models = get_model_map(base_dir, MODELS_CSV)
     model = models.get(exp.model_id)
     if model is None:
         raise RuntimeError(f"Unknown model_id: {exp.model_id}")
-    news_rows = read_csv(base_dir / NEWS_CSV)
-    price_rows = read_csv(base_dir / PRICES_CSV)
-    prediction_rows = parse_prediction_rows(read_csv(base_dir / PREDICTIONS_CSV))
-    existing_index = {(r.ticker, r.date, r.model_id): r for r in prediction_rows}
-    missing_days = [
-        day
-        for day in day_iter(exp.from_date, exp.to_date)
-        if (exp.ticker, day, exp.model_id) not in existing_index
-    ]
-    if missing_days:
-        logger.info("Predicting missing days model=%s count=%s", exp.model_id, len(missing_days))
-        new_rows = asyncio.run(
-            _predict_missing_rows(
-                base_dir=base_dir,
-                settings=settings,
-                model=model,
-                ticker=exp.ticker,
-                missing_days=missing_days,
-                news_rows=news_rows,
-                price_rows=price_rows,
-                prediction_rows=read_csv(base_dir / PREDICTIONS_CSV),
+    try:
+        news_rows = read_csv(base_dir / NEWS_CSV)
+        price_rows = read_csv(base_dir / PRICES_CSV)
+        prediction_rows = parse_prediction_rows(read_csv(base_dir / PREDICTIONS_CSV))
+        existing_index = {(r.ticker, r.date, r.model_id): r for r in prediction_rows}
+        missing_days = [
+            day
+            for day in day_iter(exp.from_date, exp.to_date)
+            if (exp.ticker, day, exp.model_id) not in existing_index
+        ]
+        if missing_days:
+            logger.info("Predicting missing days model=%s count=%s", exp.model_id, len(missing_days))
+            new_rows = asyncio.run(
+                _predict_missing_rows(
+                    base_dir=base_dir,
+                    settings=settings,
+                    model=model,
+                    ticker=exp.ticker,
+                    missing_days=missing_days,
+                    news_rows=news_rows,
+                    price_rows=price_rows,
+                    prediction_rows=read_csv(base_dir / PREDICTIONS_CSV),
+                )
             )
+            for row in new_rows:
+                existing_index[(row.ticker, row.date, row.model_id)] = row
+        produced: list[PredictionRow] = []
+        for day in day_iter(exp.from_date, exp.to_date):
+            key = (exp.ticker, day, exp.model_id)
+            row = existing_index.get(key)
+            if row is None:
+                continue
+            if row.actual is None:
+                actual = get_actual_label(price_rows, exp.ticker, day, settings)
+                if actual is not None:
+                    row.actual = actual
+                    row.is_correct = row.prediction == actual
+            produced.append(row)
+        upsert_csv(base_dir / PREDICTIONS_CSV, PREDICTION_FIELDNAMES, ["ticker", "date", "model_id"], to_dict_rows(list(existing_index.values())))
+        n, accuracy, precision, recall, f1, weighted_f1, macro_f1, y_dist = compute_metrics(produced)
+        exp.status = "completed"
+        exp.n_samples = n
+        exp.accuracy = accuracy
+        exp.precision = precision
+        exp.recall = recall
+        exp.f1 = f1
+        exp.weighted_f1 = weighted_f1
+        exp.macro_f1 = macro_f1
+        exp.y_dist = y_dist
+        exp.error = None
+        exp.finished_at_utc = now_utc()
+        upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
+        objective_value = get_objective_value(accuracy, f1, macro_f1, weighted_f1, settings.objective_function)
+        update_model_objective(
+            base_dir,
+            exp.model_id,
+            settings.objective_function,
+            objective_value,
+            {"accuracy": accuracy, "f1": f1, "macro_f1": macro_f1, "weighted_f1": weighted_f1},
         )
-        for row in new_rows:
-            existing_index[(row.ticker, row.date, row.model_id)] = row
-    produced: list[PredictionRow] = []
-    for day in day_iter(exp.from_date, exp.to_date):
-        key = (exp.ticker, day, exp.model_id)
-        row = existing_index.get(key)
-        if row is None:
-            continue
-        if row.actual is None:
-            actual = get_actual_label(price_rows, exp.ticker, day, settings)
-            if actual is not None:
-                row.actual = actual
-                row.is_correct = row.prediction == actual
-        produced.append(row)
-    upsert_csv(base_dir / PREDICTIONS_CSV, PREDICTION_FIELDNAMES, ["ticker", "date", "model_id"], to_dict_rows(list(existing_index.values())))
-    n, accuracy, precision, recall, f1, weighted_f1, macro_f1, y_dist = compute_metrics(produced)
-    exp.status = "completed"
-    exp.n_samples = n
-    exp.accuracy = accuracy
-    exp.precision = precision
-    exp.recall = recall
-    exp.f1 = f1
-    exp.weighted_f1 = weighted_f1
-    exp.macro_f1 = macro_f1
-    exp.y_dist = y_dist
-    exp.finished_at_utc = now_utc()
-    upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
-    objective_value = get_objective_value(accuracy, f1, macro_f1, weighted_f1, settings.objective_function)
-    update_model_objective(
-        base_dir,
-        exp.model_id,
-        settings.objective_function,
-        objective_value,
-        {"accuracy": accuracy, "f1": f1, "macro_f1": macro_f1, "weighted_f1": weighted_f1},
-    )
-    logger.info(
-        "Experiment done model=%s n=%s objective=%s value=%.4f weighted_f1=%.4f accuracy=%.4f",
-        exp.model_id,
-        n,
-        settings.objective_function,
-        objective_value,
-        weighted_f1,
-        accuracy,
-    )
+        logger.info(
+            "Experiment done model=%s n=%s objective=%s value=%.4f weighted_f1=%.4f accuracy=%.4f",
+            exp.model_id,
+            n,
+            settings.objective_function,
+            objective_value,
+            weighted_f1,
+            accuracy,
+        )
+    except Exception as exc:
+        exp.status = "failed"
+        exp.error = str(exc)
+        exp.finished_at_utc = now_utc()
+        upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
+        logger.error("Experiment failed model=%s error=%s", exp.model_id, str(exc))
+        raise
 
 
 def count_completed_experiments(base_dir: Path, ticker: str, from_date: str, to_date: str) -> int:
@@ -210,8 +223,8 @@ def run_generation(base_dir: Path, settings: Settings, ticker: str, from_date: s
     pending = pending[: max(0, settings.max_experiments - count_completed_experiments(base_dir, ticker, from_date, to_date))]
     if not pending:
         return []
-    worker_count = max_workers or settings.max_concurrent_models
-    worker_count = min(max(worker_count, 1), len(pending))
+    worker_count = settings.max_concurrent_models if max_workers is None else max_workers
+    worker_count = min(max(worker_count, 1), settings.max_concurrent_models, len(pending))
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = [executor.submit(run_experiment, base_dir, settings, exp) for exp in pending]
         for future in futures:

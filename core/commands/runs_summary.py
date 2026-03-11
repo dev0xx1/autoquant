@@ -12,12 +12,16 @@ def runs_summary() -> dict[str, Any]:
     run_ids = sorted([path.name for path in root_dir.iterdir() if path.is_dir()]) if root_dir.exists() else []
     if not run_ids:
         raise RuntimeError(f"No run directories found under {root_dir}/")
-    for idx, run_id in enumerate(run_ids, 1):
+    summaries: list[dict[str, Any]] = []
+    for run_id in run_ids:
         ts, acc, wf1, n_exp = run_summary_for(run_id)
-        print(f"{idx}. {run_id}  last={ts}  best_acc={acc}  best_wf1={wf1}  n_exp={n_exp}")
-    choice = input("Enter number (or Enter to exit): ").strip()
-    if choice.isdigit() and 1 <= int(choice) <= len(run_ids):
-        run_id = run_ids[int(choice) - 1]
-        ts, acc, wf1, n_exp = run_summary_for(run_id)
-        print(f"Run: {run_id}\nLast run: {ts}\nBest accuracy: {acc}\nBest weighted f1: {wf1}\nN experiments: {n_exp}")
-    return {"ok": True}
+        summaries.append(
+            {
+                "run_id": run_id,
+                "last_finished_at_utc": ts,
+                "best_accuracy": acc,
+                "best_weighted_f1": wf1,
+                "n_experiments": n_exp,
+            }
+        )
+    return {"runs": summaries}

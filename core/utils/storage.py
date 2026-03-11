@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 
-from core.io_util import read_csv, upsert_csv, write_csv
+from core.utils.io_util import read_csv, upsert_csv, write_csv
 from core.schemas import ExperimentRow, ModelRow, PredictionRow
 
 def _clean_optional(value: str) -> str | None:
@@ -31,7 +31,7 @@ def parse_experiment_rows(rows: list[dict[str, str]]) -> list[ExperimentRow]:
         for key in ["n_samples", "accuracy", "precision", "recall", "f1", "weighted_f1", "macro_f1", "y_dist"]:
             payload[key] = _clean_optional(payload.get(key, ""))
         for key in ["started_at_utc", "finished_at_utc", "error"]:
-            payload[key] = payload.get(key, "")
+            payload[key] = _clean_optional(payload.get(key, ""))
         parsed.append(ExperimentRow.model_validate(payload))
     return parsed
 

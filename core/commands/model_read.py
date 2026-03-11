@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from core.constants import MODELS_CSV
-from core.io_util import read_text
+from core.utils.io_util import read_text
 from core.paths import run_dir
-from core.storage import get_model_map
+from core.utils.storage import get_model_map
 
 
 def model_read(run_id: str, model_id: str) -> dict[str, Any]:

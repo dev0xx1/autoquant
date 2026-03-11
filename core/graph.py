@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import networkx as nx
 from networkx.readwrite import json_graph
 
 from core.constants import LINEAGE_GRAPH_JSON
-from core.io_util import read_json, write_json
+from core.utils.io_util import read_json, write_json
 
 
 def _graph_path(run_dir: Path) -> Path:
@@ -66,52 +65,3 @@ def update_model_objective(
         edge_data["objective_delta"] = objective_value - float(parent_value) if parent_value is not None else None
     save_graph(run_dir, graph)
 
-
-def get_frontier_nodes(graph: nx.DiGraph) -> list[str]:
-    return [str(node) for node in graph.nodes if graph.out_degree(node) == 0]
-
-
-def get_exploit_candidates(run_dir: Path, limit: int = 5) -> list[dict[str, Any]]:
-    graph = load_graph(run_dir)
-    frontier = get_frontier_nodes(graph)
-    rows = [
-        {
-            "model_id": str(node),
-            "objective_value": float(graph.nodes[node].get("objective_value") or 0.0),
-            "generation": int(graph.nodes[node].get("generation") or 0),
-            "out_degree": int(graph.out_degree(node)),
-            "in_degree": int(graph.in_degree(node)),
-            "descendants": len(nx.descendants(graph, node)),
-        }
-        for node in frontier
-    ]
-    rows.sort(key=lambda row: (row["objective_value"], row["descendants"]), reverse=True)
-    return rows[: max(limit, 0)]
-
-
-def get_explore_candidates(run_dir: Path, limit: int = 5) -> list[dict[str, Any]]:
-    graph = load_graph(run_dir)
-    rows = [
-        {
-            "model_id": str(node),
-            "objective_value": float(graph.nodes[node].get("objective_value") or 0.0),
-            "generation": int(graph.nodes[node].get("generation") or 0),
-            "out_degree": int(graph.out_degree(node)),
-            "in_degree": int(graph.in_degree(node)),
-            "descendants": len(nx.descendants(graph, node)),
-            "ancestors": len(nx.ancestors(graph, node)),
-        }
-        for node in graph.nodes
-    ]
-    rows.sort(key=lambda row: (row["descendants"], row["out_degree"], row["ancestors"], -row["objective_value"]))
-    return rows[: max(limit, 0)]
-
-
-def get_parent_candidates(run_dir: Path, total: int, exploit_ratio: float = 0.7) -> dict[str, list[dict[str, Any]]]:
-    total_count = max(total, 0)
-    exploit_count = min(total_count, max(0, int(round(total_count * exploit_ratio))))
-    explore_count = max(0, total_count - exploit_count)
-    return {
-        "exploit": get_exploit_candidates(run_dir, exploit_count),
-        "explore": get_explore_candidates(run_dir, explore_count),
-    }

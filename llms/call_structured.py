@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import logging
 from typing import Type, TypeVar
 
 from langfuse import get_client
 from litellm import completion
 from pydantic import BaseModel
-from smartpy.utility.log_util import getLogger
 
 from core.schemas import Settings
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 langfuse = get_client()
 
 T = TypeVar("T", bound=BaseModel)

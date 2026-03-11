@@ -4,7 +4,7 @@ from typing import Any
 
 from core.constants import MODELS_CSV
 from core.paths import run_dir
-from core.storage import get_model_rows
+from core.utils.storage import get_model_rows
 
 
 def model_list(run_id: str) -> list[dict[str, Any]]:

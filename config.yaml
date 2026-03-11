@@ -1,9 +1,0 @@
-available_predictor_models:
-  - gemini/gemini-2.5-flash
-llm_temperature: 0
-llm_max_tokens: 65536
-generation_sample_size: 3
-max_experiments: 6
-max_concurrent_models: 4
-prediction_time: "17:00"
-prediction_time_timezone: "UTC"

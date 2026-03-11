@@ -4,14 +4,13 @@ from typing import Any
 
 from core.constants import EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, MODEL_FIELDNAMES, MODELS_CSV, MODELS_DIR
 from core.graph import upsert_model_node
-from core.io_util import write_text
-from core.model_runtime import validate_model_file
+from core.utils.io_util import write_text
 from core.paths import run_dir
 from core.schemas import ExperimentRow, ModelRow
-from core.storage import get_model_rows, to_dict_rows, upsert_csv
-from core.time_utils import now_utc
+from core.utils.storage import get_model_rows, to_dict_rows, upsert_csv
+from core.utils.time_utils import now_utc
 
-from .shared import load_run_settings, read_run_meta, safe_model_text, write_run_meta
+from .shared import read_run_meta, safe_model_text, write_run_meta
 
 
 def model_create(
@@ -39,8 +38,6 @@ def model_create(
         raise ValueError(f"Unknown parent_id: {parent_id}")
     model_path = f"{MODELS_DIR}/{model_id}.py"
     write_text(target_run_dir / model_path, safe_model_text(content))
-    settings = load_run_settings(run_id)
-    validate_model_file(target_run_dir / model_path, allowed_predictor_models=settings.available_predictor_models)
     model_row = ModelRow(
         model_id=model_id,
         generation=target_generation,
@@ -58,7 +55,6 @@ def model_create(
         model_id=model_id,
         generation=target_generation,
         status="pending",
-        started_at_utc=now_utc(),
     )
     upsert_csv(target_run_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp_row]))
     upsert_model_node(target_run_dir, model_id, target_generation, parent_id, model_row.created_at_utc)

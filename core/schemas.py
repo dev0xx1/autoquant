@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, field_validator
@@ -44,7 +44,7 @@ class ExperimentRow(BaseModel):
     y_dist: Optional[float] = None
     started_at_utc: Optional[str] = None
     finished_at_utc: Optional[str] = None
-    error: Optional[str] = ""
+    error: Optional[str] = None
 
 
 class PredictionRow(BaseModel):
@@ -67,21 +67,16 @@ class RunMeta(BaseModel):
     created_at_utc: str
 
 
-class ModelModuleContract(BaseModel):
-    prompt: str
-    processed_prices: dict[str, Any]
-
-
 class Settings(BaseModel):
     available_predictor_models: list[str] = ["gemini/gemini-2.5-flash"]
     llm_temperature: float = 0
     llm_max_tokens: int = 65536
-    generation_sample_size: int = Field(default=4, ge=1)
     max_experiments: int = 8
     max_concurrent_models: int = Field(default=4, ge=1, le=4)
     prediction_time: str = "17:00"
     prediction_time_timezone: str = "UTC"
     objective_function: Literal["accuracy", "f1", "macro_f1", "weighted_f1"] = "weighted_f1"
+    min_news_coverage: float = Field(default=50.0, ge=0, le=100)
 
     @field_validator("prediction_time")
     @classmethod
