@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+import json
 from pathlib import Path
 
 from core.utils.io_util import read_csv, upsert_csv, write_csv
@@ -15,6 +16,7 @@ def parse_model_rows(rows: list[dict[str, str]]) -> list[ModelRow]:
     for row in rows:
         payload = dict(row)
         payload["generation"] = int(payload.get("generation") or 0)
+        payload["task"] = payload.get("task") or "classification"
         if "model_path" not in payload:
             payload["model_path"] = payload.get("prompt_path", "")
         payload["parent_id"] = _clean_optional(payload.get("parent_id", ""))
@@ -28,8 +30,50 @@ def parse_experiment_rows(rows: list[dict[str, str]]) -> list[ExperimentRow]:
     for row in rows:
         payload = dict(row)
         payload["generation"] = int(payload.get("generation") or payload.get("iteration") or 0)
-        for key in ["n_samples", "accuracy", "precision", "recall", "f1", "weighted_f1", "macro_f1", "y_dist"]:
-            payload[key] = _clean_optional(payload.get(key, ""))
+        payload["task"] = payload.get("task") or "classification"
+        metrics_raw = payload.get("metrics", "")
+        metrics: dict[str, object] | None = None
+        if metrics_raw:
+            metrics = json.loads(metrics_raw)
+        else:
+            validation_legacy_keys = [
+                "validation_n_samples",
+                "validation_accuracy",
+                "validation_precision",
+                "validation_recall",
+                "validation_f1",
+                "validation_weighted_f1",
+                "validation_macro_f1",
+                "validation_y_dist",
+            ]
+            test_legacy_keys = [
+                "test_n_samples",
+                "test_accuracy",
+                "test_precision",
+                "test_recall",
+                "test_f1",
+                "test_weighted_f1",
+                "test_macro_f1",
+                "test_y_dist",
+            ]
+            validation_metrics: dict[str, object] = {}
+            test_metrics: dict[str, object] = {}
+            for key in validation_legacy_keys:
+                value = _clean_optional(payload.get(key, ""))
+                if value is not None:
+                    metric_key = key.removeprefix("validation_")
+                    validation_metrics[metric_key] = float(value) if metric_key != "n_samples" else int(value)
+            for key in test_legacy_keys:
+                value = _clean_optional(payload.get(key, ""))
+                if value is not None:
+                    metric_key = key.removeprefix("test_")
+                    test_metrics[metric_key] = float(value) if metric_key != "n_samples" else int(value)
+            if validation_metrics or test_metrics:
+                metrics = {
+                    "validation": validation_metrics,
+                    "test": test_metrics,
+                }
+        payload["metrics"] = metrics
         for key in ["started_at_utc", "finished_at_utc", "error"]:
             payload[key] = _clean_optional(payload.get(key, ""))
         parsed.append(ExperimentRow.model_validate(payload))
@@ -58,6 +102,8 @@ def _serialize(value: object) -> str:
         return str(value.value)
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(",", ":"), sort_keys=True)
     return str(value)
 
 

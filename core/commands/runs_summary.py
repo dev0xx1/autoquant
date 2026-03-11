@@ -14,14 +14,15 @@ def runs_summary() -> dict[str, Any]:
         raise RuntimeError(f"No run directories found under {root_dir}/")
     summaries: list[dict[str, Any]] = []
     for run_id in run_ids:
-        ts, acc, wf1, n_exp = run_summary_for(run_id)
+        summary = run_summary_for(run_id)
         summaries.append(
             {
                 "run_id": run_id,
-                "last_finished_at_utc": ts,
-                "best_accuracy": acc,
-                "best_weighted_f1": wf1,
-                "n_experiments": n_exp,
+                "last_finished_at_utc": summary["last_finished_at_utc"],
+                "best_objective": summary["best_objective"],
+                "objective_function": summary["objective_function"],
+                "task": summary["task"],
+                "n_experiments": summary["n_experiments"],
             }
         )
     return {"runs": summaries}

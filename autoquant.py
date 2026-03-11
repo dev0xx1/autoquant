@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-import argparse
 import json
+from typing import Annotated, Literal
+
+import typer
 
 from core.commands import (
     config_get,
-    data_sync,
     experiment_run,
     experiments_list,
     generation_run,
+    prepare_data,
     get_learning_tree,
     get_generation_state,
     model_create,
@@ -21,178 +23,214 @@ from core.commands import (
     visualize,
 )
 
+
+app = typer.Typer(
+    no_args_is_help=True,
+    help="AutoQuant CLI.",
+)
+
+
 def _print(payload: object) -> None:
     print(json.dumps(payload, ensure_ascii=True))
 
 
+@app.command(
+    "run-init",
+    help="Initialize a run with settings and seed model experiments. Returns run metadata and initial experiment registration details.",
+)
+def run_init_command(
+    run_id: Annotated[str, typer.Option(...)],
+    ticker: Annotated[str, typer.Option(...)],
+    from_date: Annotated[str, typer.Option(...)],
+    to_date: Annotated[str, typer.Option(...)],
+    task: Annotated[Literal["classification", "regression"], typer.Option(...)],
+    available_predictor_models: Annotated[list[str], typer.Option()] = ["gemini/gemini-2.5-flash"],
+    llm_temperature: Annotated[float, typer.Option()] = 0,
+    llm_max_tokens: Annotated[int, typer.Option()] = 65536,
+    max_experiments: Annotated[int, typer.Option()] = 8,
+    max_concurrent_models: Annotated[int, typer.Option()] = 4,
+    prediction_time: Annotated[str, typer.Option()] = "17:00",
+    prediction_time_timezone: Annotated[str, typer.Option()] = "UTC",
+    objective_function: Annotated[Literal["accuracy", "f1", "macro_f1", "weighted_f1", "r2"] | None, typer.Option()] = None,
+    min_news_coverage: Annotated[float, typer.Option()] = 50.0,
+    seed_model_path: Annotated[str, typer.Option()] = "",
+) -> None:
+    _print(
+        run_init(
+            run_id,
+            ticker,
+            from_date,
+            to_date,
+            task,
+            available_predictor_models,
+            llm_temperature,
+            llm_max_tokens,
+            max_experiments,
+            max_concurrent_models,
+            prediction_time,
+            prediction_time_timezone,
+            objective_function,
+            min_news_coverage,
+            seed_model_path=(seed_model_path or None),
+        )
+    )
+
+
+@app.command(
+    "prepare-data",
+    help="Fetch and store run OHLCV data for the configured ticker/date range. Returns sync status and data summary.",
+)
+def prepare_data_command(run_id: Annotated[str, typer.Option(...)]) -> None:
+    _print(prepare_data(run_id))
+
+
+@app.command(
+    "experiments-list",
+    help="List experiments for a run, optionally filtered by status. Returns experiment records.",
+)
+def experiments_list_command(
+    run_id: Annotated[str, typer.Option(...)],
+    status: Annotated[str, typer.Option()] = "",
+) -> None:
+    _print(experiments_list(run_id, status=(status or None)))
+
+
+@app.command(
+    "run-experiment",
+    help="Execute one experiment for a specific model in a run. Returns execution result and metrics payload.",
+)
+def experiment_run_command(
+    run_id: Annotated[str, typer.Option(...)],
+    model_id: Annotated[str, typer.Option(...)],
+) -> None:
+    _print(experiment_run(run_id, model_id))
+
+
+@app.command(
+    "run-generation",
+    help="Execute pending experiments for the run generation up to worker limits. Returns generation execution summary.",
+)
+def generation_run_command(
+    run_id: Annotated[str, typer.Option(...)],
+    max_workers: Annotated[int, typer.Option()] = 0,
+) -> None:
+    _print(generation_run(run_id, max_workers=(max_workers or None)))
+
+
+@app.command(
+    "generate-model",
+    help="Register a validated model source file and lineage metadata for a run. Returns created model metadata.",
+)
+def generate_model_command(
+    run_id: Annotated[str, typer.Option(...)],
+    name: Annotated[str, typer.Option(...)],
+    content: Annotated[str, typer.Option(...)],
+    log: Annotated[str, typer.Option(...)],
+    reasoning: Annotated[str, typer.Option()] = "",
+    generation: Annotated[int, typer.Option()] = -1,
+    parent_id: Annotated[str, typer.Option()] = "",
+) -> None:
+    _print(
+        model_create(
+            run_id,
+            name,
+            content,
+            log,
+            reasoning,
+            generation=(None if generation < 0 else generation),
+            parent_id=(parent_id or None),
+        )
+    )
+
+
+@app.command(
+    "list-models",
+    help="List all registered models for a run. Returns model metadata array.",
+)
+def model_list_command(run_id: Annotated[str, typer.Option(...)]) -> None:
+    _print(model_list(run_id))
+
+
+@app.command(
+    "get-model",
+    help="Read one model's metadata and source by model id. Returns full model payload.",
+)
+def get_model_command(
+    run_id: Annotated[str, typer.Option(...)],
+    model_id: Annotated[str, typer.Option(...)],
+) -> None:
+    _print(model_read(run_id, model_id))
+
+
+@app.command(
+    "model-validate",
+    help="Validate a candidate model file against runtime and metrics contract rules. Returns validation outcome details.",
+)
+def model_validate_command(
+    run_id: Annotated[str, typer.Option(...)],
+    model_path: Annotated[str, typer.Option(...)],
+) -> None:
+    _print(model_validate(run_id, model_path))
+
+
+@app.command(
+    "get-learning-tree",
+    help="Build lineage and performance view for model selection decisions. Returns learning tree payload.",
+)
+def get_learning_tree_command(run_id: Annotated[str, typer.Option(...)]) -> None:
+    _print(get_learning_tree(run_id))
+
+
+@app.command(
+    "read-predictions",
+    help="Read run predictions with optional model and date filters. Returns prediction rows.",
+)
+def predictions_read_command(
+    run_id: Annotated[str, typer.Option(...)],
+    model_id: Annotated[str, typer.Option()] = "",
+    date_from: Annotated[str, typer.Option()] = "",
+    date_to: Annotated[str, typer.Option()] = "",
+) -> None:
+    _print(predictions_read(run_id, model_id=(model_id or None), date_from=(date_from or None), date_to=(date_to or None)))
+
+
+@app.command(
+    "visualize-learning",
+    help="Generate run charts and optionally write files to an output directory. Returns chart artifact info.",
+)
+def visualize_learning_command(
+    run_id: Annotated[str, typer.Option(...)],
+    output: Annotated[str, typer.Option()] = "",
+) -> None:
+    _print(visualize(run_id, output=(output or None)))
+
+
+@app.command(
+    "get-config",
+    help="Read saved run settings snapshot. Returns run configuration.",
+)
+def config_get_command(run_id: Annotated[str, typer.Option(...)]) -> None:
+    _print(config_get(run_id))
+
+
+@app.command(
+    "get-generation-summary",
+    help="Read current generation progress and pending/completed counts. Returns generation status.",
+)
+def generation_state_command(run_id: Annotated[str, typer.Option(...)]) -> None:
+    _print(get_generation_state(run_id))
+
+
+@app.command(
+    "get-runs-summary",
+    help="Summarize all discovered runs and their top-level performance. Returns run summary list.",
+)
+def runs_summary_command() -> None:
+    _print(runs_summary())
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser(
-        "run-init",
-        help="Initialize a run and seed model",
-        description="Create a run with settings and register the seed model with pending experiments.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--ticker", required=True)
-    p.add_argument("--from_date", required=True)
-    p.add_argument("--to_date", required=True)
-    p.add_argument("--available_predictor_models", nargs="+", default=["gemini/gemini-2.5-flash"])
-    p.add_argument("--llm_temperature", type=float, default=0)
-    p.add_argument("--llm_max_tokens", type=int, default=65536)
-    p.add_argument("--max_experiments", type=int, default=8)
-    p.add_argument("--max_concurrent_models", type=int, default=4)
-    p.add_argument("--prediction_time", default="17:00")
-    p.add_argument("--prediction_time_timezone", default="UTC")
-    p.add_argument("--objective_function", choices=["accuracy", "f1", "macro_f1", "weighted_f1"], default="weighted_f1")
-    p.add_argument("--min_news_coverage", type=float, default=50.0)
-    p.add_argument("--seed_model_path", default="")
-    p.set_defaults(
-        func=lambda a: _print(
-            run_init(
-                a.run_id,
-                a.ticker,
-                a.from_date,
-                a.to_date,
-                a.available_predictor_models,
-                a.llm_temperature,
-                a.llm_max_tokens,
-                a.max_experiments,
-                a.max_concurrent_models,
-                a.prediction_time,
-                a.prediction_time_timezone,
-                a.objective_function,
-                a.min_news_coverage,
-                seed_model_path=(a.seed_model_path or None),
-            )
-        )
-    )
-    p = sub.add_parser(
-        "data-sync",
-        help="Fetch and store price/news data",
-        description="Sync prices and news for a run and enforce min_news_coverage.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.set_defaults(func=lambda a: _print(data_sync(a.run_id)))
-    p = sub.add_parser(
-        "experiments-list",
-        help="List experiments for a run",
-        description="List experiments for a run, optionally filtered by status.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--status", default="")
-    p.set_defaults(func=lambda a: _print(experiments_list(a.run_id, status=(a.status or None))))
-    p = sub.add_parser(
-        "experiment-run",
-        help="Run a single model experiment",
-        description="Execute one experiment for a specific model in a run.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--model_id", required=True)
-    p.set_defaults(func=lambda a: _print(experiment_run(a.run_id, a.model_id)))
-    p = sub.add_parser(
-        "generation-run",
-        help="Run pending experiments in generation",
-        description="Execute pending experiments up to configured limits for the current generation.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--max_workers", type=int, default=0)
-    p.set_defaults(func=lambda a: _print(generation_run(a.run_id, max_workers=(a.max_workers or None))))
-    p = sub.add_parser(
-        "model-create",
-        help="Register a validated model",
-        description="Create and register a model file in the run with lineage metadata.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--name", required=True)
-    p.add_argument("--content", required=True)
-    p.add_argument("--log", required=True)
-    p.add_argument("--reasoning", default="")
-    p.add_argument("--generation", type=int, default=-1)
-    p.add_argument("--parent_id", default="")
-    p.set_defaults(
-        func=lambda a: _print(
-            model_create(
-                a.run_id,
-                a.name,
-                a.content,
-                a.log,
-                a.reasoning,
-                generation=(None if a.generation < 0 else a.generation),
-                parent_id=(a.parent_id or None),
-            )
-        )
-    )
-    p = sub.add_parser(
-        "model-list",
-        help="List models in a run",
-        description="Return all registered models for a run.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.set_defaults(func=lambda a: _print(model_list(a.run_id)))
-    p = sub.add_parser(
-        "model-read",
-        help="Read model metadata and source",
-        description="Read model metadata and source code for a model id.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--model_id", required=True)
-    p.set_defaults(func=lambda a: _print(model_read(a.run_id, a.model_id)))
-    p = sub.add_parser(
-        "model-validate",
-        help="Validate candidate model file",
-        description="Validate a candidate model file against runtime and contract constraints.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--file_path", required=True)
-    p.set_defaults(func=lambda a: _print(model_validate(a.run_id, a.file_path)))
-    p = sub.add_parser(
-        "get-learning-tree",
-        help="Get model lineage and learning tree",
-        description="Return learning tree and lineage metrics for model selection decisions.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.set_defaults(func=lambda a: _print(get_learning_tree(a.run_id)))
-    p = sub.add_parser(
-        "predictions-read",
-        help="Read predictions for a run",
-        description="Read predictions filtered by model id and optional date range.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--model_id", default="")
-    p.add_argument("--date_from", default="")
-    p.add_argument("--date_to", default="")
-    p.set_defaults(func=lambda a: _print(predictions_read(a.run_id, model_id=(a.model_id or None), date_from=(a.date_from or None), date_to=(a.date_to or None))))
-    p = sub.add_parser(
-        "visualize",
-        help="Generate run charts",
-        description="Generate visualization charts for run experiments and performance.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--output", default="")
-    p.set_defaults(func=lambda a: _print(visualize(a.run_id, output=(a.output or None))))
-    p = sub.add_parser(
-        "config-get",
-        help="Read run configuration",
-        description="Return the saved settings snapshot for a run.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.set_defaults(func=lambda a: _print(config_get(a.run_id)))
-    p = sub.add_parser(
-        "generation-state",
-        help="Read current generation status",
-        description="Return generation progress and pending/completed counts for a run.",
-    )
-    p.add_argument("--run_id", required=True)
-    p.set_defaults(func=lambda a: _print(get_generation_state(a.run_id)))
-    p = sub.add_parser(
-        "runs-summary",
-        help="Summarize all runs",
-        description="Return summary metrics across available runs.",
-    )
-    p.set_defaults(func=lambda a: _print(runs_summary()))
-    args = parser.parse_args()
-    args.func(args)
+    app()
 
 
 if __name__ == "__main__":
