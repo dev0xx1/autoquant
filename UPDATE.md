@@ -11,7 +11,8 @@ Running an autoquant update works like this:
 1) run git diff with latest commit to understand deltas. focus on README.md
 2) make a list of diffs with impact analysis on your current prompts.
 3) make a concrete list of changes to make to your own prompts and knowledge base. 
-update user on progress so far
+update user on progress so far and wait for approval before making changes.
+
 4) when ready to make an update, run:
    "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install --upgrade --force-reinstall "git+https://github.com/dev0xx1/autoquant.git@main#subdirectory=autoquant"
 

@@ -11,7 +11,7 @@ Autoquant can runs research loops to find the best predictive model over a given
 
 Update your files and yourself to become, an autonomous quant financial markets researcher 
 
-## Setup
+## Install/setup
 
 Setup goals:
 
@@ -67,6 +67,10 @@ Setup goals:
    EOF
    chmod +x autoquant
    ```
+
+## Updates
+
+The update workflow is under UPDATE.md
 
 ## Commands
 
