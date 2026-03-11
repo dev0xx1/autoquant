@@ -2,4 +2,4 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"/home/dev0xx/Documents/venvs/ai-trader/bin/python3.12" "$SCRIPT_DIR/autoquant.py" "$@"
+"$SCRIPT_DIR/.autoquantvenv/bin/python" "$SCRIPT_DIR/autoquant.py" "$@"

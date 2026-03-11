@@ -10,8 +10,7 @@ from typing import Any
 from dotenv import load_dotenv
 from polygon import RESTClient
 
-from core import NEWS_CSV, PRICES_CSV
-from core.constants import DATA_REPORT_TXT
+from core.constants import DATA_REPORT_TXT, NEWS_CSV, PRICES_CSV
 from core.paths import run_dir
 from core.schemas import Settings
 from core.utils.io_util import upsert_csv, write_text

@@ -6,15 +6,27 @@ All commands return JSON and are designed to be called by an agent loop.
 
 ## Setup
 
-Run from the `autoquant` directory.
+Setup goals:
 
-1. Create a virtual environment and install dependencies:
+Clone the repo.
+Create a virtual environment and install dependencies.
+Create a local script to easily call commands.
+Setup environment vars safely
+
+
+1. Clone the repo and enter the project directory:
+   ```bash
+   git clone <repo-url>
+   cd autoquant
+   ```
+
+2. Create a virtual environment and install dependencies:
    ```bash
    python3 -m venv .autoquantvenv
    .autoquantvenv/bin/pip install -r requirements.txt
    ```
 
-2. Create the launcher script:
+3. Create the launcher script:
    ```bash
    cat > autoquant <<'EOF'
    #!/usr/bin/env bash
@@ -24,25 +36,14 @@ Run from the `autoquant` directory.
    EOF
    chmod +x autoquant
    ```
-3. Set environment variables:
-   - Required keys listed in `autoquant/.env.example`
-   - No external local libraries are required in `PYTHONPATH` for AutoQuant
-4. Verify installation:
+4. Set environment variables:
+   - Required keys listed in `autoquant/.env.example` must be added to openclaw.json
+   - Ask API keys from user or let him update the env vars directly
+
+5. Verify installation:
    ```bash
    ./autoquant --help
    ```
-
-## Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key |
-| `GEMINI_API_KEY` | Yes | Gemini API key |
-| `MASSIVE_API_KEY` | Yes | Polygon market data key |
-| `LANGFUSE_PROJECT_ID` | No | Langfuse project ID |
-| `LANGFUSE_SECRET_KEY` | No | Langfuse secret key |
-| `LANGFUSE_PUBLIC_KEY` | No | Langfuse public key |
-| `LANGFUSE_BASE_URL` | No | Langfuse base URL |
 
 ## Model Contract
 
@@ -70,6 +71,7 @@ Use:
 
 - `./autoquant --help` to list all commands with their descriptions.
 - `./autoquant <command> --help` to see arguments and usage for one command.
+
 
 ## Research loop
 
