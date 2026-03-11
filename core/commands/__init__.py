@@ -1,5 +1,5 @@
 from core.commands.config_get import config_get
-from core.commands.data_sync import data_sync
+from core.commands.prepare_data import prepare_data
 from core.commands.experiment_run import experiment_run
 from core.commands.experiments_list import experiments_list
 from core.commands.generation_run import generation_run
@@ -16,7 +16,7 @@ from core.commands.visualize import visualize
 
 __all__ = [
     "config_get",
-    "data_sync",
+    "prepare_data",
     "experiment_run",
     "experiments_list",
     "generation_run",

@@ -1,105 +1,44 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-from llms import get_actual_label, predict_one_day
-from core.schemas import ExperimentRow, ModelRow, PredictionLabel, PredictionRow, Settings
+from core.schemas import ExperimentRow, ModelRow, Settings
 
 from core.constants import (
     EXPERIMENTS_CSV,
     EXPERIMENT_FIELDNAMES,
     MODELS_CSV,
-    PREDICTIONS_CSV,
-    PREDICTION_FIELDNAMES,
     PRICES_CSV,
-    NEWS_CSV,
+    RUN_SETTINGS_JSON,
 )
 from core.graph import update_model_objective
+from core.utils.data_util import get_ohlcv
+from core.utils.io_util import read_csv, read_json
+from core.utils.model_runtime import run_train_file
 from core.utils.storage import (
     get_model_map,
     get_model_rows,
     parse_experiment_rows,
-    parse_prediction_rows,
-    read_csv,
     to_dict_rows,
     upsert_csv,
 )
-from core.utils.time_utils import day_iter, now_utc
+from core.utils.time_utils import now_utc
 
 
-def _safe_div(num: float, den: float) -> float:
-    return num / den if den > 0 else 0.0
-
-
-def compute_metrics(rows: list[PredictionRow]) -> tuple[int, float, float, float, float, float, float, float]:
-    valid = [r for r in rows if r.actual is not None]
-    n = len(valid)
-    if n == 0:
-        return 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    correct = sum(1 for r in valid if r.prediction == r.actual)
-    tp_up = sum(1 for r in valid if r.prediction == PredictionLabel.UP and r.actual == PredictionLabel.UP)
-    fp_up = sum(1 for r in valid if r.prediction == PredictionLabel.UP and r.actual == PredictionLabel.DOWN)
-    fn_up = sum(1 for r in valid if r.prediction == PredictionLabel.DOWN and r.actual == PredictionLabel.UP)
-    tp_down = sum(1 for r in valid if r.prediction == PredictionLabel.DOWN and r.actual == PredictionLabel.DOWN)
-    fp_down = fn_up
-    fn_down = fp_up
-    precision_up = _safe_div(tp_up, tp_up + fp_up)
-    recall_up = _safe_div(tp_up, tp_up + fn_up)
-    f1_up = _safe_div(2 * precision_up * recall_up, precision_up + recall_up)
-    precision_down = _safe_div(tp_down, tp_down + fp_down)
-    recall_down = _safe_div(tp_down, tp_down + fn_down)
-    f1_down = _safe_div(2 * precision_down * recall_down, precision_down + recall_down)
-    support_up = tp_up + fn_up
-    support_down = tp_down + fn_down
-    macro_f1 = (f1_up + f1_down) / 2.0
-    weighted_f1 = _safe_div((f1_up * support_up) + (f1_down * support_down), support_up + support_down)
-    true_up = sum(1 for r in valid if r.actual == PredictionLabel.UP)
-    return n, correct / n, precision_up, recall_up, f1_up, weighted_f1, macro_f1, true_up / n
-
-
-def get_objective_value(accuracy: float, f1: float, macro_f1: float, weighted_f1: float, objective_function: str) -> float:
-    if objective_function == "accuracy":
-        return accuracy
-    if objective_function == "f1":
-        return f1
-    if objective_function == "macro_f1":
-        return macro_f1
-    return weighted_f1
-
-
-async def _predict_missing_rows(
-    base_dir: Path,
-    settings: Settings,
-    model: ModelRow,
-    ticker: str,
-    missing_days: list[str],
-    news_rows: list[dict[str, str]],
-    price_rows: list[dict[str, str]],
-    prediction_rows: list[dict[str, str]],
-) -> list[PredictionRow]:
-    semaphore = asyncio.Semaphore(5)
-
-    async def predict_day(day: str) -> PredictionRow:
-        async with semaphore:
-            return await asyncio.to_thread(
-                predict_one_day,
-                base_dir=base_dir,
-                settings=settings,
-                model=model,
-                ticker=ticker,
-                day=day,
-                news_rows=news_rows,
-                price_rows=price_rows,
-                prediction_rows=prediction_rows,
-                created_at_utc=now_utc(),
-            )
-
-    return await asyncio.gather(*(predict_day(day) for day in missing_days))
+def get_objective_value(metrics: dict[str, object], objective_function: str, task: str) -> float:
+    if task == "classification":
+        if objective_function == "accuracy":
+            return float(metrics["accuracy"])
+        if objective_function == "f1":
+            return float(metrics["f1"])
+        if objective_function == "macro_f1":
+            return float(metrics["macro_f1"])
+        return float(metrics["weighted_f1"])
+    return float(metrics["r2"])
 
 
 def run_experiment(base_dir: Path, settings: Settings, exp: ExperimentRow) -> None:
@@ -108,79 +47,56 @@ def run_experiment(base_dir: Path, settings: Settings, exp: ExperimentRow) -> No
     exp.started_at_utc = now_utc()
     exp.finished_at_utc = None
     exp.error = None
+    exp.task = settings.task
     upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
     models = get_model_map(base_dir, MODELS_CSV)
-    model = models.get(exp.model_id)
+    model: ModelRow | None = models.get(exp.model_id)
     if model is None:
         raise RuntimeError(f"Unknown model_id: {exp.model_id}")
     try:
-        news_rows = read_csv(base_dir / NEWS_CSV)
-        price_rows = read_csv(base_dir / PRICES_CSV)
-        prediction_rows = parse_prediction_rows(read_csv(base_dir / PREDICTIONS_CSV))
-        existing_index = {(r.ticker, r.date, r.model_id): r for r in prediction_rows}
-        missing_days = [
-            day
-            for day in day_iter(exp.from_date, exp.to_date)
-            if (exp.ticker, day, exp.model_id) not in existing_index
-        ]
-        if missing_days:
-            logger.info("Predicting missing days model=%s count=%s", exp.model_id, len(missing_days))
-            new_rows = asyncio.run(
-                _predict_missing_rows(
-                    base_dir=base_dir,
-                    settings=settings,
-                    model=model,
-                    ticker=exp.ticker,
-                    missing_days=missing_days,
-                    news_rows=news_rows,
-                    price_rows=price_rows,
-                    prediction_rows=read_csv(base_dir / PREDICTIONS_CSV),
-                )
-            )
-            for row in new_rows:
-                existing_index[(row.ticker, row.date, row.model_id)] = row
-        produced: list[PredictionRow] = []
-        for day in day_iter(exp.from_date, exp.to_date):
-            key = (exp.ticker, day, exp.model_id)
-            row = existing_index.get(key)
-            if row is None:
-                continue
-            if row.actual is None:
-                actual = get_actual_label(price_rows, exp.ticker, day, settings)
-                if actual is not None:
-                    row.actual = actual
-                    row.is_correct = row.prediction == actual
-            produced.append(row)
-        upsert_csv(base_dir / PREDICTIONS_CSV, PREDICTION_FIELDNAMES, ["ticker", "date", "model_id"], to_dict_rows(list(existing_index.values())))
-        n, accuracy, precision, recall, f1, weighted_f1, macro_f1, y_dist = compute_metrics(produced)
+        price_rows = get_ohlcv(base_dir.name, ticker=exp.ticker)
+        if not price_rows:
+            raise RuntimeError(f"No rows found in {PRICES_CSV} for ticker={exp.ticker}")
+        train_output = run_train_file(
+            base_dir / model.model_path,
+            price_rows,
+            train_ratio=0.6,
+            validation_ratio=0.2,
+            test_ratio=0.2,
+            expected_task=settings.task,
+        )
+        validation_metrics = train_output.get("validation")
+        test_metrics = train_output.get("test")
+        if not isinstance(validation_metrics, dict) or not isinstance(test_metrics, dict):
+            raise RuntimeError("Invalid train output: validation and test must be dicts")
         exp.status = "completed"
-        exp.n_samples = n
-        exp.accuracy = accuracy
-        exp.precision = precision
-        exp.recall = recall
-        exp.f1 = f1
-        exp.weighted_f1 = weighted_f1
-        exp.macro_f1 = macro_f1
-        exp.y_dist = y_dist
+        exp.metrics = {
+            "validation": validation_metrics,
+            "test": test_metrics,
+        }
         exp.error = None
         exp.finished_at_utc = now_utc()
         upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
-        objective_value = get_objective_value(accuracy, f1, macro_f1, weighted_f1, settings.objective_function)
+        objective_value = get_objective_value(validation_metrics, settings.objective_function, settings.task)
         update_model_objective(
             base_dir,
             exp.model_id,
             settings.objective_function,
             objective_value,
-            {"accuracy": accuracy, "f1": f1, "macro_f1": macro_f1, "weighted_f1": weighted_f1},
+            {"task": settings.task, "metrics": {"validation": validation_metrics, "test": test_metrics}},
         )
+        summary_metric = "macro_f1" if settings.task == "classification" else "r2"
+        summary_value = float(validation_metrics[summary_metric])
         logger.info(
-            "Experiment done model=%s n=%s objective=%s value=%.4f weighted_f1=%.4f accuracy=%.4f",
+            "Experiment done model=%s validation_n=%s test_n=%s objective=%s value=%.4f task=%s summary_metric=%s summary_value=%.4f",
             exp.model_id,
-            n,
+            validation_metrics.get("n_samples"),
+            test_metrics.get("n_samples"),
             settings.objective_function,
             objective_value,
-            weighted_f1,
-            accuracy,
+            settings.task,
+            summary_metric,
+            summary_value,
         )
     except Exception as exc:
         exp.status = "failed"
@@ -205,7 +121,7 @@ def completed_experiments(base_dir: Path, ticker: str, from_date: str, to_date: 
         and r.from_date == from_date
         and r.to_date == to_date
         and r.status == "completed"
-        and (r.weighted_f1 is not None or r.f1 is not None or r.accuracy is not None)
+        and r.metrics is not None
     ]
 
 
@@ -241,7 +157,14 @@ def generate_learning_chart(run_dir: Path, output_path: Path | None = None) -> P
 
     exp_rows = parse_experiment_rows(read_csv(run_dir / EXPERIMENTS_CSV))
     model_rows = {m.model_id: m for m in get_model_rows(run_dir, MODELS_CSV)}
-    completed = [e for e in exp_rows if e.status == "completed" and e.macro_f1 is not None]
+    settings = Settings.model_validate(read_json(run_dir / RUN_SETTINGS_JSON))
+    completed = [
+        e
+        for e in exp_rows
+        if e.status == "completed"
+        and e.metrics is not None
+        and isinstance(e.metrics.get("validation"), dict)
+    ]
     completed.sort(key=lambda e: e.finished_at_utc or e.started_at_utc or "")
     if not completed:
         if output_path is None:
@@ -249,12 +172,15 @@ def generate_learning_chart(run_dir: Path, output_path: Path | None = None) -> P
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.set_title("Learning Progress: 0 Experiments, 0 Kept Improvements")
         ax.set_xlabel("Experiment #")
-        ax.set_ylabel("Validation Loss (1 - Macro F1, lower is better)")
+        ax.set_ylabel("Validation Loss (1 - objective, lower is better)")
         fig.savefig(output_path, dpi=150, bbox_inches="tight")
         plt.close()
         return output_path
 
-    validation_loss = [1.0 - float(e.macro_f1) for e in completed]
+    validation_objective = [
+        get_objective_value(e.metrics["validation"], settings.objective_function, e.task) for e in completed if e.metrics is not None
+    ]
+    validation_loss = [1.0 - value for value in validation_objective]
     running_best = []
     best_so_far = 1.0
     for v in validation_loss:
@@ -276,7 +202,7 @@ def generate_learning_chart(run_dir: Path, output_path: Path | None = None) -> P
         log = (model_rows.get(model_id).log or model_id) if model_id in model_rows else model_id
         ax.annotate(log, (i, validation_loss[i]), textcoords="offset points", xytext=(0, 10), ha="center", fontsize=7, rotation=45)
     ax.set_xlabel("Experiment #")
-    ax.set_ylabel("Validation Loss (1 - Macro F1, lower is better)")
+    ax.set_ylabel("Validation Loss (1 - objective, lower is better)")
     ax.set_title(f"Learning Progress: {n_total} Experiments, {n_kept} Kept Improvements")
     ax.legend(loc="upper right")
     ax.grid(True, color="lightgray", linestyle="-")

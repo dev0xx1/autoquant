@@ -47,5 +47,6 @@ def get_learning_tree(run_id: str) -> dict[str, Any]:
     return {
         "run_id": run_id,
         "objective_function": settings.objective_function,
+        "task": settings.task,
         "graph": nx.node_link_data(enriched_graph),
     }

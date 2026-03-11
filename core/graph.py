@@ -47,7 +47,7 @@ def update_model_objective(
     model_id: str,
     objective_function: str,
     objective_value: float,
-    metrics: dict[str, float],
+    metrics: dict[str, object],
 ) -> None:
     graph = load_graph(run_dir)
     if model_id not in graph:

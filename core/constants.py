@@ -7,8 +7,9 @@ DATA_REPORT_TXT = "data/data_report.txt"
 RUN_DATA_DIR = "data"
 RUN_SETTINGS_JSON = "settings.json"
 MODELS_DIR = "models"
-RUN_META_JSON = "meta.json"
-MODEL_FIELDNAMES = ["model_id", "generation", "model_path", "parent_id", "reasoning", "log", "created_at_utc"]
+RUN_META_JSON = "metadata.json"
+RUN_META_JSON_LEGACY = "meta.json"
+MODEL_FIELDNAMES = ["model_id", "generation", "task", "model_path", "parent_id", "reasoning", "log", "created_at_utc"]
 LINEAGE_GRAPH_JSON = "data/lineage_graph.json"
 EXPERIMENT_FIELDNAMES = [
     "ticker",
@@ -16,15 +17,9 @@ EXPERIMENT_FIELDNAMES = [
     "to_date",
     "model_id",
     "generation",
+    "task",
     "status",
-    "n_samples",
-    "accuracy",
-    "precision",
-    "recall",
-    "f1",
-    "weighted_f1",
-    "macro_f1",
-    "y_dist",
+    "metrics",
     "started_at_utc",
     "finished_at_utc",
     "error",

@@ -10,7 +10,7 @@ from core.schemas import ExperimentRow, ModelRow
 from core.utils.storage import get_model_rows, to_dict_rows, upsert_csv
 from core.utils.time_utils import now_utc
 
-from .shared import read_run_meta, safe_model_text, write_run_meta
+from .shared import load_run_settings, read_run_meta, safe_model_text, write_run_meta
 
 
 def model_create(
@@ -24,6 +24,7 @@ def model_create(
 ) -> dict[str, Any]:
     target_run_dir = run_dir(run_id)
     meta = read_run_meta(run_id)
+    settings = load_run_settings(run_id)
     models = get_model_rows(target_run_dir, MODELS_CSV)
     target_generation = generation if generation is not None else (max((model.generation for model in models), default=-1) + 1)
     model_id = name.strip().removesuffix(".py") if name.strip().endswith(".py") else name.strip()
@@ -41,6 +42,7 @@ def model_create(
     model_row = ModelRow(
         model_id=model_id,
         generation=target_generation,
+        task=settings.task,
         model_path=model_path,
         parent_id=parent_id,
         reasoning=reasoning,
@@ -54,6 +56,7 @@ def model_create(
         to_date=meta.to_date,
         model_id=model_id,
         generation=target_generation,
+        task=settings.task,
         status="pending",
     )
     upsert_csv(target_run_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp_row]))

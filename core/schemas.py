@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, field_validator
@@ -20,6 +20,7 @@ class PredictionResponse(BaseModel):
 class ModelRow(BaseModel):
     model_id: str
     generation: int = 0
+    task: Literal["classification", "regression"] = "classification"
     model_path: str
     parent_id: Optional[str] = None
     reasoning: Optional[str] = ""
@@ -33,15 +34,9 @@ class ExperimentRow(BaseModel):
     to_date: str
     model_id: str
     generation: int = 0
+    task: Literal["classification", "regression"] = "classification"
     status: str = "pending"
-    n_samples: Optional[int] = None
-    accuracy: Optional[float] = None
-    precision: Optional[float] = None
-    recall: Optional[float] = None
-    f1: Optional[float] = None
-    weighted_f1: Optional[float] = None
-    macro_f1: Optional[float] = None
-    y_dist: Optional[float] = None
+    metrics: Optional[dict[str, Any]] = None
     started_at_utc: Optional[str] = None
     finished_at_utc: Optional[str] = None
     error: Optional[str] = None
@@ -65,6 +60,7 @@ class RunMeta(BaseModel):
     to_date: str
     current_generation: int = 0
     created_at_utc: str
+    autoquant_commit_hash: str | None = None
 
 
 class Settings(BaseModel):
@@ -75,7 +71,8 @@ class Settings(BaseModel):
     max_concurrent_models: int = Field(default=4, ge=1, le=4)
     prediction_time: str = "17:00"
     prediction_time_timezone: str = "UTC"
-    objective_function: Literal["accuracy", "f1", "macro_f1", "weighted_f1"] = "weighted_f1"
+    task: Literal["classification", "regression"] = "classification"
+    objective_function: str = "macro_f1"
     min_news_coverage: float = Field(default=50.0, ge=0, le=100)
 
     @field_validator("prediction_time")
@@ -92,4 +89,13 @@ class Settings(BaseModel):
     @classmethod
     def validate_prediction_time_timezone(cls, v: str) -> str:
         ZoneInfo(v)
+        return v
+
+    @field_validator("objective_function")
+    @classmethod
+    def validate_objective_function(cls, v: str, info: Any) -> str:
+        task = info.data.get("task", "classification")
+        allowed = {"accuracy", "f1", "macro_f1", "weighted_f1"} if task == "classification" else {"r2"}
+        if v not in allowed:
+            raise ValueError(f"objective_function must be one of {sorted(allowed)} for task={task}")
         return v
