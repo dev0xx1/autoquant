@@ -4,26 +4,36 @@ AutoQuant is an autonomous financial research agent that predicts next-day direc
 
 All commands return JSON and are designed to be called by an agent loop.
 
+
+## Boostrap
+
+Run your bootstrap and soul identity to be autoquant, an autonomous quant financial markets researcher trained at the top quant hedge fund institutions like Renaissance Technologies, Bridgewater and the likes. Autoquant has scientific reasoning and exceptional creativity.
+
+
 ## Setup
 
 Setup goals:
 
-Clone the repo.
-Create a virtual environment and install dependencies.
-Create a local script to easily call commands.
-Setup environment vars safely
+- Run your bootstrap.md based on these README instructions.
+- Clone the repo.
+- Create a virtual environment and install dependencies.
+- Create a local script to easily call commands.
+- Setup environment vars safely
 
 
-1. Clone the repo and enter the project directory:
+1. Create the workspace, clone the repo, and enter the project directory:
    ```bash
-   git clone <repo-url>
-   cd autoquant
+   export AUTOQUANT_WORKSPACE="${AUTOQUANT_WORKSPACE:-$HOME/Documents/autoquant}"
+   mkdir -p "$AUTOQUANT_WORKSPACE"
+   git clone <repo-url> "$AUTOQUANT_WORKSPACE/autoquant"
+   cd "$AUTOQUANT_WORKSPACE/autoquant"
    ```
 
 2. Create a virtual environment and install dependencies:
    ```bash
-   python3 -m venv .autoquantvenv
-   .autoquantvenv/bin/pip install -r requirements.txt
+   mkdir -p "$AUTOQUANT_WORKSPACE/venv"
+   python3 -m venv "$AUTOQUANT_WORKSPACE/venv/autoquant"
+   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install -r requirements.txt
    ```
 
 3. Create the launcher script:
@@ -31,8 +41,11 @@ Setup environment vars safely
    cat > autoquant <<'EOF'
    #!/usr/bin/env bash
    set -euo pipefail
-   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-   "$SCRIPT_DIR/.autoquantvenv/bin/python" "$SCRIPT_DIR/autoquant.py" "$@"
+   BASE_DIR="${AUTOQUANT_WORKSPACE:-$HOME/Documents/autoquant}"
+   if [[ ! -x "$BASE_DIR/venv/autoquant/bin/python" || ! -f "$BASE_DIR/autoquant/autoquant.py" ]]; then
+     BASE_DIR="$(pwd)/autoquant"
+   fi
+   "$BASE_DIR/venv/autoquant/bin/python" "$BASE_DIR/autoquant/autoquant.py" "$@"
    EOF
    chmod +x autoquant
    ```
@@ -44,24 +57,6 @@ Setup environment vars safely
    ```bash
    ./autoquant --help
    ```
-
-## Model Contract
-
-Each model is a Python file under `~/Documents/autoquant/runs/<run_id>/models/` and must define:
-
-- `price_lookback_window_days` as integer
-- `predictor_model` as string, and it must be in `available_predictor_models` from run settings
-- `temperature` as float
-- `prompt` as non-empty string
-- `process_prices(price_rows)` as callable returning a `dict`
-
-Validation constraints:
-
-- Imports are restricted to `math`, `statistics`, `typing`, `datetime`, and `__future__`
-- Disallowed dynamic and system calls are rejected during validation
-- `price_lookback_window_days` is constrained to `1..30`
-
-Use `core/seed_model.py` as the baseline template.
 
 ## Commands
 
@@ -75,16 +70,17 @@ Use:
 
 ## Research loop
 
-Use this research loop logic
+Use this research loop to maximize predictive power and the objective function over the 
+training set.
 
-### New Run Bootstrap
+### New Run 
 
 1. `run-init` with explicit settings.
 2. `data-sync`.
 3. If `data-sync` fails on news coverage, stop and report the error.
 4. `generation-run` once to execute pending seed experiments.
 
-### Iterative Research Loop
+### Autonomous Loop
 
 Repeat until stop condition. Can run for existing run_id.
 
@@ -107,6 +103,26 @@ on the next generation of models
 10. Continue from step 1.
 
 
+
+## Model Contract
+
+Each model is a Python file under `$AUTOQUANT_WORKSPACE/runs/<run_id>/models/` and must define:
+
+- `price_lookback_window_days` as integer
+- `predictor_model` as string, and it must be in `available_predictor_models` from run settings
+- `temperature` as float
+- `prompt` as non-empty string
+- `process_prices(price_rows)` as callable returning a `dict`
+
+Validation constraints:
+
+- Imports are restricted to `math`, `statistics`, `typing`, `datetime`, and `__future__`
+- Disallowed dynamic and system calls are rejected during validation
+- `price_lookback_window_days` is constrained to `1..30`
+
+Use `core/seed_model.py` as the baseline template.
+
+
 ## Failure Handling
 
 - You must let the user know about any issues related to python virtual environments and any critical problem in our framework.
@@ -114,7 +130,7 @@ on the next generation of models
 
 ## Run Layout
 
-Each run creates `~/Documents/autoquant/runs/<run_id>/`:
+Each run creates `$AUTOQUANT_WORKSPACE/runs/<run_id>/`:
 
 - `meta.json`
 - `settings.json`

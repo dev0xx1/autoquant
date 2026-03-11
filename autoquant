@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"$SCRIPT_DIR/.autoquantvenv/bin/python" "$SCRIPT_DIR/autoquant.py" "$@"
+BASE_DIR="${AUTOQUANT_WORKSPACE:-$HOME/Documents/autoquant}"
+if [[ ! -x "$BASE_DIR/venv/autoquant/bin/python" || ! -f "$BASE_DIR/autoquant/autoquant.py" ]]; then
+  BASE_DIR="$(pwd)/autoquant"
+fi
+"$BASE_DIR/venv/autoquant/bin/python" "$BASE_DIR/autoquant/autoquant.py" "$@"
