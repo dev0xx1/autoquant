@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from core.constants import EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, MODEL_FIELDNAMES, MODELS_CSV, MODELS_DIR
@@ -22,15 +23,20 @@ def model_create(
     generation: int | None = None,
     parent_id: str | None = None,
 ) -> dict[str, Any]:
+    model_name = name.strip()
+    if not model_name:
+        raise ValueError("name cannot be empty")
+    if len(model_name) > 20:
+        raise ValueError("name cannot be longer than 20 characters")
     target_run_dir = run_dir(run_id)
     meta = read_run_meta(run_id)
     settings = load_run_settings(run_id)
     models = get_model_rows(target_run_dir, MODELS_CSV)
     target_generation = generation if generation is not None else (max((model.generation for model in models), default=-1) + 1)
-    model_id = name.strip().removesuffix(".py") if name.strip().endswith(".py") else name.strip()
-    if not model_id:
-        raise ValueError("model name cannot be empty")
     existing_model_ids = {model.model_id for model in models}
+    model_id = ""
+    while not model_id or model_id in existing_model_ids:
+        model_id = uuid.uuid4().hex[:8]
     if models and not parent_id:
         raise ValueError("parent_id is required for non-seed models")
     if not models and parent_id:
@@ -40,6 +46,7 @@ def model_create(
     model_path = f"{MODELS_DIR}/{model_id}.py"
     write_text(target_run_dir / model_path, safe_model_text(content))
     model_row = ModelRow(
+        name=model_name,
         model_id=model_id,
         generation=target_generation,
         task=settings.task,
@@ -64,6 +71,7 @@ def model_create(
     meta.current_generation = max(meta.current_generation, target_generation)
     write_run_meta(meta)
     return {
+        "name": model_name,
         "run_id": run_id,
         "model_id": model_id,
         "generation": target_generation,

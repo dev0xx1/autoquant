@@ -106,7 +106,7 @@ on the next generation of models
    - `model-validate` runs the model with `$AUTOQUANT_WORKSPACE/venv/autoquant/bin/python`
    - if validation fails because a dependency is missing, install the missing package in the AutoQuant virtualenv, then re-run `model-validate`
    - if invalid, fix file and re-run `model-validate`
-   - if valid, `generate-model` with explicit `--parent_id` and `--generation`
+  - if valid, `generate-model` with required `--name` and explicit `--parent_id` and `--generation`
 6. `run-generation --run_id <id>`.
 7. `experiments-list --run_id <id> --status pending` and `get-generation-summary --run_id <id>`.
 8. `visualize-learning --run_id <id>`

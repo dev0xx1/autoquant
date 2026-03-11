@@ -11,6 +11,7 @@ from core.commands.get_learning_tree import get_learning_tree
 from core.commands.model_validate import model_validate
 from core.commands.predictions_read import predictions_read
 from core.commands.run_init import run_init
+from core.commands.run_status import run_status
 from core.commands.runs_summary import runs_summary
 from core.commands.visualize import visualize
 
@@ -28,6 +29,7 @@ __all__ = [
     "model_validate",
     "predictions_read",
     "run_init",
+    "run_status",
     "runs_summary",
     "visualize",
 ]

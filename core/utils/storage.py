@@ -15,6 +15,7 @@ def parse_model_rows(rows: list[dict[str, str]]) -> list[ModelRow]:
     parsed: list[ModelRow] = []
     for row in rows:
         payload = dict(row)
+        payload["name"] = payload.get("name") or payload.get("model_id", "")
         payload["generation"] = int(payload.get("generation") or 0)
         payload["task"] = payload.get("task") or "classification"
         if "model_path" not in payload:

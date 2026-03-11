@@ -18,6 +18,7 @@ class PredictionResponse(BaseModel):
 
 
 class ModelRow(BaseModel):
+    name: str
     model_id: str
     generation: int = 0
     task: Literal["classification", "regression"] = "classification"

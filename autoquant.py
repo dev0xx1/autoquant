@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Annotated, Literal
 
 import typer
@@ -20,6 +21,7 @@ from core.commands import (
     predictions_read,
     runs_summary,
     run_init,
+    run_status,
     visualize,
 )
 
@@ -39,7 +41,6 @@ def _print(payload: object) -> None:
     help="Initialize a run with settings and seed model experiments. Returns run metadata and initial experiment registration details.",
 )
 def run_init_command(
-    run_id: Annotated[str, typer.Option(...)],
     ticker: Annotated[str, typer.Option(...)],
     from_date: Annotated[str, typer.Option(...)],
     to_date: Annotated[str, typer.Option(...)],
@@ -54,6 +55,7 @@ def run_init_command(
     objective_function: Annotated[Literal["accuracy", "f1", "macro_f1", "weighted_f1", "r2"] | None, typer.Option()] = None,
     min_news_coverage: Annotated[float, typer.Option()] = 50.0,
     seed_model_path: Annotated[str, typer.Option()] = "",
+    run_id: Annotated[str, typer.Option()] = "",
 ) -> None:
     _print(
         run_init(
@@ -124,12 +126,13 @@ def generation_run_command(
 def generate_model_command(
     run_id: Annotated[str, typer.Option(...)],
     name: Annotated[str, typer.Option(...)],
-    content: Annotated[str, typer.Option(...)],
+    model_path: Annotated[str, typer.Option(...)],
     log: Annotated[str, typer.Option(...)],
     reasoning: Annotated[str, typer.Option()] = "",
-    generation: Annotated[int, typer.Option()] = -1,
+    generation: Annotated[int | None, typer.Option()] = None,
     parent_id: Annotated[str, typer.Option()] = "",
 ) -> None:
+    content = Path(model_path).read_text(encoding="utf-8")
     _print(
         model_create(
             run_id,
@@ -137,7 +140,7 @@ def generate_model_command(
             content,
             log,
             reasoning,
-            generation=(None if generation < 0 else generation),
+            generation=generation,
             parent_id=(parent_id or None),
         )
     )
@@ -219,6 +222,14 @@ def config_get_command(run_id: Annotated[str, typer.Option(...)]) -> None:
 )
 def generation_state_command(run_id: Annotated[str, typer.Option(...)]) -> None:
     _print(get_generation_state(run_id))
+
+
+@app.command(
+    "get-run-status",
+    help="Read run config and current generation state in one call. Returns merged config and generation payload.",
+)
+def run_status_command(run_id: Annotated[str, typer.Option(...)]) -> None:
+    _print(run_status(run_id))
 
 
 @app.command(

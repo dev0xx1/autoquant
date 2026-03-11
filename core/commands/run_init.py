@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,8 @@ def run_init(
     min_news_coverage: float | None = None,
     seed_model_path: str | None = None,
 ) -> dict[str, Any]:
+    if not run_id:
+        run_id = uuid.uuid4().hex[:8]
     target_run_dir = run_dir(run_id)
     defaults = Settings().model_dump(mode="json")
     objective = objective_function
