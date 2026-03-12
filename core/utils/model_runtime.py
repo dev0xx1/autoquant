@@ -72,7 +72,7 @@ def _run_model_class(
         with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
             exec(code, env, env)
             model_class = _discover_model_class(env, module_name)
-            resolved_training_days = training_size_days if training_size_days is not None else 90
+            resolved_training_days = training_size_days if training_size_days is not None else 30
             resolved_test_days = test_size_days if test_size_days is not None else 7
             resolved_train_time_limit_minutes = train_time_limit_minutes if train_time_limit_minutes is not None else 5.0
             model = model_class(

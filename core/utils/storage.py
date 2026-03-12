@@ -29,7 +29,7 @@ def parse_model_rows(rows: list[dict[str, str]]) -> list[ModelRow]:
         payload["task"] = payload.get("task") or "classification"
         if "model_path" not in payload:
             payload["model_path"] = payload.get("prompt_path", "")
-        payload["training_size_days"] = int(payload.get("training_size_days") or 90)
+        payload["training_size_days"] = int(payload.get("training_size_days") or 30)
         payload["test_size_days"] = int(payload.get("test_size_days") or 7)
         payload["parent_id"] = _clean_optional(payload.get("parent_id", ""))
         payload["log"] = payload.get("log", "")

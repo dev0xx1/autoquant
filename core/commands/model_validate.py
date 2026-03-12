@@ -35,7 +35,7 @@ def _validation_model_name(path: Path) -> str:
 def model_validate(
     model_path: str,
     task: str,
-    training_size_days: int = 90,
+    training_size_days: int = 30,
     test_size_days: int = 7,
     refresh_data: bool = False,
 ) -> dict[str, Any]:

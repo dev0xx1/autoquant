@@ -25,7 +25,7 @@ def model_create(
     content: str,
     log: str,
     reasoning: str,
-    training_size_days: int = 90,
+    training_size_days: int = 30,
     test_size_days: int = 7,
     generation: int | None = None,
     parent_id: str | None = None,

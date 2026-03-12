@@ -29,7 +29,7 @@ def run_init(
     objective_function: str | None = None,
     min_news_coverage: float | None = None,
     seed_model_path: str | None = None,
-    seed_training_size_days: int = 90,
+    seed_training_size_days: int = 30,
     seed_test_size_days: int = 7,
 ) -> dict[str, Any]:
     if not run_id:
