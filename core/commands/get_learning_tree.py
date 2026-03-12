@@ -9,7 +9,16 @@ from core.graph import load_graph
 from core.paths import run_dir
 from core.utils.storage import get_model_map, parse_experiment_rows, read_csv
 
-from .shared import load_run_settings, read_run_meta
+from .shared import read_run_meta
+
+
+def _keep_validation_only(metrics: Any) -> dict[str, Any] | None:
+    if not isinstance(metrics, dict):
+        return None
+    validation = metrics.get("validation")
+    if isinstance(validation, dict):
+        return validation
+    return metrics
 
 
 def _get_experiment_map(run_id: str) -> dict[str, dict[str, Any]]:
@@ -22,13 +31,14 @@ def _get_experiment_map(run_id: str) -> dict[str, dict[str, Any]]:
         previous_ts = (previous["finished_at_utc"] or previous["started_at_utc"] or "") if previous else ""
         current_ts = row.finished_at_utc or row.started_at_utc or ""
         if previous is None or current_ts > previous_ts:
-            exp_map[row.model_id] = row.model_dump(mode="json")
+            payload = row.model_dump(mode="json")
+            payload["metrics"] = _keep_validation_only(payload.get("metrics"))
+            exp_map[row.model_id] = payload
     return exp_map
 
 
 def get_learning_tree(run_id: str) -> dict[str, Any]:
     meta = read_run_meta(run_id)
-    settings = load_run_settings(run_id)
     target_run_dir = run_dir(run_id)
     graph = load_graph(target_run_dir)
     model_map = get_model_map(target_run_dir, MODELS_CSV)
@@ -39,6 +49,7 @@ def get_learning_tree(run_id: str) -> dict[str, Any]:
         model = model_map.get(model_id)
         experiment = experiment_map.get(model_id)
         node_attrs = dict(enriched_graph.nodes[node_id])
+        node_attrs["metrics"] = _keep_validation_only(node_attrs.get("metrics"))
         if not node_attrs.get("parent_id") and model and model.parent_id:
             node_attrs["parent_id"] = model.parent_id
         node_attrs["model"] = model.model_dump(mode="json") if model else None
@@ -46,7 +57,7 @@ def get_learning_tree(run_id: str) -> dict[str, Any]:
         enriched_graph.nodes[node_id].update(node_attrs)
     return {
         "run_id": run_id,
-        "objective_function": settings.objective_function,
-        "task": settings.task,
+        "objective_function": meta.objective_function,
+        "task": meta.task,
         "graph": nx.node_link_data(enriched_graph),
     }

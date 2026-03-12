@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+
 def workspace_root() -> Path:
     workspace_value = os.getenv("AUTOQUANT_WORKSPACE", "~/Documents/autoquant")
     workspace = Path(workspace_value).expanduser()
@@ -18,13 +19,9 @@ def workspace_root() -> Path:
 
 
 def runs_root() -> Path:
-    root_value = os.getenv("AUTOQUANT_RUNS_ROOT", "")
-    if root_value:
-        root = Path(root_value).expanduser()
-        if root.is_absolute():
-            return root
-        return Path.home() / root
-    return workspace_root() / "runs"
+    root = workspace_root() / "runs"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def run_dir(run_id: str) -> Path:

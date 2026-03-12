@@ -7,7 +7,6 @@ from typing import Annotated, Literal
 import typer
 
 from core.commands import (
-    config_get,
     experiment_run,
     experiments_list,
     generation_run,
@@ -19,6 +18,7 @@ from core.commands import (
     model_read,
     model_validate,
     predictions_read,
+    run_metadata_get,
     runs_summary,
     run_init,
     run_status,
@@ -37,21 +37,17 @@ def _print(payload: object) -> None:
 
 
 @app.command(
-    "run-init",
-    help="Initialize a run with settings and seed model experiments. Returns run metadata and initial experiment registration details.",
+    "init-run",
+    help="Initialize a run with metadata and seed model experiments. Returns run metadata and initial experiment registration details.",
 )
 def run_init_command(
     ticker: Annotated[str, typer.Option(...)],
     from_date: Annotated[str, typer.Option(...)],
     to_date: Annotated[str, typer.Option(...)],
     task: Annotated[Literal["classification", "regression"], typer.Option(...)],
-    available_predictor_models: Annotated[list[str], typer.Option()] = ["gemini/gemini-2.5-flash"],
-    llm_temperature: Annotated[float, typer.Option()] = 0,
-    llm_max_tokens: Annotated[int, typer.Option()] = 65536,
     max_experiments: Annotated[int, typer.Option()] = 8,
     max_concurrent_models: Annotated[int, typer.Option()] = 4,
-    prediction_time: Annotated[str, typer.Option()] = "17:00",
-    prediction_time_timezone: Annotated[str, typer.Option()] = "UTC",
+    train_time_limit: Annotated[float, typer.Option()] = 5.0,
     objective_function: Annotated[Literal["accuracy", "f1", "macro_f1", "weighted_f1", "r2"] | None, typer.Option()] = None,
     min_news_coverage: Annotated[float, typer.Option()] = 50.0,
     seed_model_path: Annotated[str, typer.Option()] = "",
@@ -64,13 +60,9 @@ def run_init_command(
             from_date,
             to_date,
             task,
-            available_predictor_models,
-            llm_temperature,
-            llm_max_tokens,
             max_experiments,
             max_concurrent_models,
-            prediction_time,
-            prediction_time_timezone,
+            train_time_limit,
             objective_function,
             min_news_coverage,
             seed_model_path=(seed_model_path or None),
@@ -121,7 +113,7 @@ def generation_run_command(
 
 @app.command(
     "generate-model",
-    help="Register a validated model source file and lineage metadata for a run. Returns created model metadata.",
+    help="Register a model source file and lineage metadata for a run. Returns created model metadata.",
 )
 def generate_model_command(
     run_id: Annotated[str, typer.Option(...)],
@@ -129,6 +121,8 @@ def generate_model_command(
     model_path: Annotated[str, typer.Option(...)],
     log: Annotated[str, typer.Option(...)],
     reasoning: Annotated[str, typer.Option()] = "",
+    training_size_days: Annotated[int, typer.Option()] = 90,
+    test_size_days: Annotated[int, typer.Option()] = 7,
     generation: Annotated[int | None, typer.Option()] = None,
     parent_id: Annotated[str, typer.Option()] = "",
 ) -> None:
@@ -140,8 +134,32 @@ def generate_model_command(
             content,
             log,
             reasoning,
+            training_size_days=training_size_days,
+            test_size_days=test_size_days,
             generation=generation,
             parent_id=(parent_id or None),
+        )
+    )
+
+
+@app.command(
+    "validate-model",
+    help="Validate a model by running it as an experiment in shared sandbox run (AAPL, Feb 2026). Returns status and metrics.",
+)
+def validate_model_command(
+    model_path: Annotated[str, typer.Option(...)],
+    task: Annotated[Literal["classification", "regression"], typer.Option(...)],
+    training_size_days: Annotated[int, typer.Option()] = 90,
+    test_size_days: Annotated[int, typer.Option()] = 7,
+    refresh_data: Annotated[bool, typer.Option()] = False,
+) -> None:
+    _print(
+        model_validate(
+            model_path=model_path,
+            task=task,
+            training_size_days=training_size_days,
+            test_size_days=test_size_days,
+            refresh_data=refresh_data,
         )
     )
 
@@ -163,17 +181,6 @@ def get_model_command(
     model_id: Annotated[str, typer.Option(...)],
 ) -> None:
     _print(model_read(run_id, model_id))
-
-
-@app.command(
-    "model-validate",
-    help="Validate a candidate model file against runtime and metrics contract rules. Returns validation outcome details.",
-)
-def model_validate_command(
-    run_id: Annotated[str, typer.Option(...)],
-    model_path: Annotated[str, typer.Option(...)],
-) -> None:
-    _print(model_validate(run_id, model_path))
 
 
 @app.command(
@@ -209,11 +216,11 @@ def visualize_learning_command(
 
 
 @app.command(
-    "get-config",
-    help="Read saved run settings snapshot. Returns run configuration.",
+    "get-run-metadata",
+    help="Read saved run metadata. Returns run metadata.",
 )
-def config_get_command(run_id: Annotated[str, typer.Option(...)]) -> None:
-    _print(config_get(run_id))
+def run_metadata_get_command(run_id: Annotated[str, typer.Option(...)]) -> None:
+    _print(run_metadata_get(run_id))
 
 
 @app.command(
@@ -226,7 +233,7 @@ def generation_state_command(run_id: Annotated[str, typer.Option(...)]) -> None:
 
 @app.command(
     "get-run-status",
-    help="Read run config and current generation state in one call. Returns merged config and generation payload.",
+    help="Read run metadata and current generation state in one call. Returns merged metadata and generation payload.",
 )
 def run_status_command(run_id: Annotated[str, typer.Option(...)]) -> None:
     _print(run_status(run_id))

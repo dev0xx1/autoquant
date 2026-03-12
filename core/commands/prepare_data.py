@@ -12,7 +12,7 @@ from core.constants import DATA_REPORT_TXT, PRICES_CSV
 from core.paths import run_dir
 from core.utils.io_util import upsert_csv, write_text
 
-from .shared import get_fetch_from_date, load_run_settings, read_run_meta
+from .shared import get_fetch_from_date, read_run_meta
 
 
 def _value(item: Any, keys: list[str]) -> Any:
@@ -121,7 +121,6 @@ def run_prepare_data(base_dir: Path, ticker: str, from_date: str, to_date: str) 
 
 def prepare_data(run_id: str) -> dict[str, Any]:
     meta = read_run_meta(run_id)
-    load_run_settings(run_id)
     fetch_from = get_fetch_from_date(meta.from_date)
     run_prepare_data(run_dir(run_id), meta.ticker, fetch_from, meta.to_date)
     return {"run_id": run_id, "ticker": meta.ticker, "fetch_from_date": fetch_from, "to_date": meta.to_date}

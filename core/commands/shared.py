@@ -16,11 +16,10 @@ from core.constants import (
     RUN_DATA_DIR,
     RUN_META_JSON,
     RUN_META_JSON_LEGACY,
-    RUN_SETTINGS_JSON,
 )
 from core.utils.io_util import ensure_csv_header, read_json, write_json
 from core.paths import run_dir
-from core.schemas import RunMeta, Settings
+from core.schemas import RunMeta
 from core.utils.storage import parse_experiment_rows, read_csv
 
 PRICE_FETCH_LOOKBACK_DAYS = 30
@@ -77,13 +76,6 @@ def write_run_meta(meta: RunMeta) -> None:
     write_json(run_dir(meta.run_id) / RUN_META_JSON, meta.model_dump(mode="json"))
 
 
-def load_run_settings(run_id: str) -> Settings:
-    path = run_dir(run_id) / RUN_SETTINGS_JSON
-    if not path.exists():
-        raise RuntimeError(f"Missing run settings snapshot: {path}")
-    return Settings.model_validate(read_json(path))
-
-
 def _objective_from_validation_metrics(task: str, objective_function: str, metrics: dict[str, object]) -> float:
     if task == "classification":
         if objective_function == "accuracy":
@@ -96,22 +88,31 @@ def _objective_from_validation_metrics(task: str, objective_function: str, metri
     return float(metrics["r2"])
 
 
+def _extract_metrics(metrics: object) -> dict[str, object] | None:
+    if not isinstance(metrics, dict):
+        return None
+    validation = metrics.get("validation")
+    if isinstance(validation, dict):
+        return validation
+    return metrics
+
+
 def run_summary_for(run_id: str) -> dict[str, str]:
     rows = parse_experiment_rows(read_csv(run_dir(run_id) / EXPERIMENTS_CSV))
-    settings = load_run_settings(run_id)
+    meta = read_run_meta(run_id)
     n_exp = str(len(rows))
     completed = [row for row in rows if row.status == "completed" and row.metrics is not None]
     objectives: list[float] = []
     for row in completed:
-        validation_metrics = row.metrics.get("validation") if row.metrics else None
+        validation_metrics = _extract_metrics(row.metrics)
         if isinstance(validation_metrics, dict):
-            objectives.append(_objective_from_validation_metrics(row.task, settings.objective_function, validation_metrics))
+            objectives.append(_objective_from_validation_metrics(row.task, meta.objective_function, validation_metrics))
     best_objective = max(objectives) if objectives else None
     ts = max(((row.finished_at_utc or row.started_at_utc or "") for row in rows), default="")
     return {
         "last_finished_at_utc": ts or "-",
         "best_objective": f"{best_objective:.4f}" if best_objective is not None else "-",
         "n_experiments": n_exp,
-        "objective_function": settings.objective_function,
-        "task": settings.task,
+        "objective_function": meta.objective_function,
+        "task": meta.task,
     }

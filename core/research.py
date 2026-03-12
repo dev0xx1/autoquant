@@ -6,17 +6,15 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-from core.schemas import ExperimentRow, ModelRow, Settings
+from core.schemas import ExperimentRow, ModelRow, RunMeta
 
 from core.constants import (
     EXPERIMENTS_CSV,
     EXPERIMENT_FIELDNAMES,
     MODELS_CSV,
-    PRICES_CSV,
-    RUN_SETTINGS_JSON,
+    RUN_META_JSON,
 )
 from core.graph import update_model_objective
-from core.utils.data_util import get_ohlcv
 from core.utils.io_util import read_csv, read_json
 from core.utils.model_runtime import run_train_file
 from core.utils.storage import (
@@ -41,65 +39,76 @@ def get_objective_value(metrics: dict[str, object], objective_function: str, tas
     return float(metrics["r2"])
 
 
-def run_experiment(base_dir: Path, settings: Settings, exp: ExperimentRow) -> None:
+def _as_validation_metrics(metrics: object) -> dict[str, object] | None:
+    if not isinstance(metrics, dict):
+        return None
+    validation = metrics.get("validation")
+    if isinstance(validation, dict):
+        return validation
+    return metrics
+
+
+def run_experiment(base_dir: Path, run_meta: RunMeta, exp: ExperimentRow) -> None:
     logger.info("Experiment start model=%s ticker=%s range=%s..%s", exp.model_id, exp.ticker, exp.from_date, exp.to_date)
     exp.status = "running"
     exp.started_at_utc = now_utc()
     exp.finished_at_utc = None
     exp.error = None
-    exp.task = settings.task
+    exp.task = run_meta.task
     upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
     models = get_model_map(base_dir, MODELS_CSV)
     model: ModelRow | None = models.get(exp.model_id)
     if model is None:
         raise RuntimeError(f"Unknown model_id: {exp.model_id}")
     try:
-        price_rows = get_ohlcv(base_dir.name, ticker=exp.ticker)
-        if not price_rows:
-            raise RuntimeError(f"No rows found in {PRICES_CSV} for ticker={exp.ticker}")
         train_output = run_train_file(
             base_dir / model.model_path,
-            price_rows,
-            train_ratio=0.6,
-            validation_ratio=0.2,
-            test_ratio=0.2,
-            expected_task=settings.task,
+            run_id=base_dir.name,
+            model_id=exp.model_id,
+            expected_task=run_meta.task,
+            training_size_days=model.training_size_days,
+            test_size_days=model.test_size_days,
+            train_time_limit_minutes=run_meta.train_time_limit_minutes,
         )
+        train_metrics = train_output.get("train")
         validation_metrics = train_output.get("validation")
-        test_metrics = train_output.get("test")
-        if not isinstance(validation_metrics, dict) or not isinstance(test_metrics, dict):
-            raise RuntimeError("Invalid train output: validation and test must be dicts")
+        runtime_error = str(train_output.get("runtime_error") or "").strip()
+        stderr_text = str(train_output.get("stderr") or "").strip()
+        stdout_text = str(train_output.get("stdout") or "").strip()
+        if runtime_error or stderr_text:
+            parts = [text for text in [runtime_error, stderr_text, stdout_text] if text]
+            raise RuntimeError("\n\n".join(parts))
+        if not isinstance(train_metrics, dict) or not isinstance(validation_metrics, dict):
+            raise RuntimeError(f"Invalid train output: {train_output}")
         exp.status = "completed"
-        exp.metrics = {
-            "validation": validation_metrics,
-            "test": test_metrics,
-        }
+        exp.metrics = validation_metrics
         exp.error = None
         exp.finished_at_utc = now_utc()
         upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
-        objective_value = get_objective_value(validation_metrics, settings.objective_function, settings.task)
+        objective_value = get_objective_value(validation_metrics, run_meta.objective_function, run_meta.task)
         update_model_objective(
             base_dir,
             exp.model_id,
-            settings.objective_function,
+            run_meta.objective_function,
             objective_value,
-            {"task": settings.task, "metrics": {"validation": validation_metrics, "test": test_metrics}},
+            {"task": run_meta.task, "metrics": {"validation": validation_metrics}},
         )
-        summary_metric = "macro_f1" if settings.task == "classification" else "r2"
+        summary_metric = "macro_f1" if run_meta.task == "classification" else "r2"
         summary_value = float(validation_metrics[summary_metric])
         logger.info(
-            "Experiment done model=%s validation_n=%s test_n=%s objective=%s value=%.4f task=%s summary_metric=%s summary_value=%.4f",
+            "Experiment done model=%s train_n=%s validation_n=%s objective=%s value=%.4f task=%s summary_metric=%s summary_value=%.4f",
             exp.model_id,
+            train_metrics.get("n_samples"),
             validation_metrics.get("n_samples"),
-            test_metrics.get("n_samples"),
-            settings.objective_function,
+            run_meta.objective_function,
             objective_value,
-            settings.task,
+            run_meta.task,
             summary_metric,
             summary_value,
         )
     except Exception as exc:
         exp.status = "failed"
+        exp.metrics = None
         exp.error = str(exc)
         exp.finished_at_utc = now_utc()
         upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
@@ -134,15 +143,15 @@ def get_pending_experiments(base_dir: Path, ticker: str, from_date: str, to_date
     ]
 
 
-def run_generation(base_dir: Path, settings: Settings, ticker: str, from_date: str, to_date: str, max_workers: int | None = None) -> list[str]:
+def run_generation(base_dir: Path, run_meta: RunMeta, ticker: str, from_date: str, to_date: str, max_workers: int | None = None) -> list[str]:
     pending = get_pending_experiments(base_dir, ticker, from_date, to_date)
-    pending = pending[: max(0, settings.max_experiments - count_completed_experiments(base_dir, ticker, from_date, to_date))]
+    pending = pending[: max(0, run_meta.max_experiments - count_completed_experiments(base_dir, ticker, from_date, to_date))]
     if not pending:
         return []
-    worker_count = settings.max_concurrent_models if max_workers is None else max_workers
-    worker_count = min(max(worker_count, 1), settings.max_concurrent_models, len(pending))
+    worker_count = run_meta.max_concurrent_models if max_workers is None else max_workers
+    worker_count = min(max(worker_count, 1), run_meta.max_concurrent_models, len(pending))
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
-        futures = [executor.submit(run_experiment, base_dir, settings, exp) for exp in pending]
+        futures = [executor.submit(run_experiment, base_dir, run_meta, exp) for exp in pending]
         for future in futures:
             future.result()
     generation = max((e.generation for e in pending), default=0)
@@ -157,13 +166,13 @@ def generate_learning_chart(run_dir: Path, output_path: Path | None = None) -> P
 
     exp_rows = parse_experiment_rows(read_csv(run_dir / EXPERIMENTS_CSV))
     model_rows = {m.model_id: m for m in get_model_rows(run_dir, MODELS_CSV)}
-    settings = Settings.model_validate(read_json(run_dir / RUN_SETTINGS_JSON))
+    run_meta = RunMeta.model_validate(read_json(run_dir / RUN_META_JSON))
     completed = [
         e
         for e in exp_rows
         if e.status == "completed"
         and e.metrics is not None
-        and isinstance(e.metrics.get("validation"), dict)
+        and _as_validation_metrics(e.metrics) is not None
     ]
     completed.sort(key=lambda e: e.finished_at_utc or e.started_at_utc or "")
     if not completed:
@@ -178,7 +187,9 @@ def generate_learning_chart(run_dir: Path, output_path: Path | None = None) -> P
         return output_path
 
     validation_objective = [
-        get_objective_value(e.metrics["validation"], settings.objective_function, e.task) for e in completed if e.metrics is not None
+        get_objective_value(validation_metrics, run_meta.objective_function, e.task)
+        for e in completed
+        if (validation_metrics := _as_validation_metrics(e.metrics)) is not None
     ]
     validation_loss = [1.0 - value for value in validation_objective]
     running_best = []

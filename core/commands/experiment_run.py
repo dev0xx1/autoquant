@@ -7,12 +7,11 @@ from core.paths import run_dir
 from core.research import run_experiment
 from core.utils.storage import parse_experiment_rows, read_csv
 
-from .shared import load_run_settings, read_run_meta
+from .shared import read_run_meta
 
 
 def experiment_run(run_id: str, model_id: str) -> dict[str, Any]:
     meta = read_run_meta(run_id)
-    settings = load_run_settings(run_id)
     rows = parse_experiment_rows(read_csv(run_dir(run_id) / EXPERIMENTS_CSV))
     exp = next(
         (
@@ -24,7 +23,7 @@ def experiment_run(run_id: str, model_id: str) -> dict[str, Any]:
     )
     if exp is None:
         raise RuntimeError(f"Unknown experiment model_id={model_id} in run={run_id}")
-    run_experiment(run_dir(run_id), settings, exp)
+    run_experiment(run_dir(run_id), meta, exp)
     latest = parse_experiment_rows(read_csv(run_dir(run_id) / EXPERIMENTS_CSV))
     done = next(
         row

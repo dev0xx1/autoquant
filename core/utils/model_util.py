@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Sequence
 
 import numpy as np
+import pandas as pd
 from sklearn.metrics import (
     classification_report,
     explained_variance_score,
@@ -15,6 +16,15 @@ from sklearn.metrics import (
 
 TASK_CLASSIFICATION = "classification"
 TASK_REGRESSION = "regression"
+
+
+def walk_forward(start_ts: pd.Timestamp, end_ts: pd.Timestamp, training_size_days: int, test_size_days: int = 7):
+    test_start_ts = start_ts + pd.Timedelta(days=training_size_days)
+    while test_start_ts < end_ts:
+        test_end_ts = min(test_start_ts + pd.Timedelta(days=test_size_days), end_ts + pd.Timedelta(microseconds=1))
+        train_start_ts = test_start_ts - pd.Timedelta(days=training_size_days)
+        yield train_start_ts, test_start_ts, test_end_ts
+        test_start_ts = test_end_ts
 
 
 def _compute_classification_metrics(y_true: Sequence[int], y_pred: Sequence[int]) -> dict[str, float | int | dict[str, float | int]]:
@@ -65,24 +75,24 @@ def _compute_regression_metrics(y_true: Sequence[float], y_pred: Sequence[float]
 
 def eval(
     task: str,
+    train_actual: Sequence[float | int],
+    train_pred: Sequence[float | int],
     validation_actual: Sequence[float | int],
     validation_pred: Sequence[float | int],
-    test_actual: Sequence[float | int],
-    test_pred: Sequence[float | int],
 ) -> dict[str, object]:
     if task not in {TASK_CLASSIFICATION, TASK_REGRESSION}:
         raise ValueError("task must be classification or regression")
     if task == TASK_CLASSIFICATION:
+        train_metrics = _compute_classification_metrics([int(value) for value in train_actual], [int(value) for value in train_pred])
         validation_metrics = _compute_classification_metrics(
             [int(value) for value in validation_actual], [int(value) for value in validation_pred]
         )
-        test_metrics = _compute_classification_metrics([int(value) for value in test_actual], [int(value) for value in test_pred])
     else:
+        train_metrics = _compute_regression_metrics([float(value) for value in train_actual], [float(value) for value in train_pred])
         validation_metrics = _compute_regression_metrics(
             [float(value) for value in validation_actual], [float(value) for value in validation_pred]
         )
-        test_metrics = _compute_regression_metrics([float(value) for value in test_actual], [float(value) for value in test_pred])
     return {
+        "train": train_metrics,
         "validation": validation_metrics,
-        "test": test_metrics,
     }

@@ -11,6 +11,15 @@ def _clean_optional(value: str) -> str | None:
     return None if value == "" else value
 
 
+def _extract_task_metrics(metrics: object) -> dict[str, object] | None:
+    if not isinstance(metrics, dict):
+        return None
+    validation = metrics.get("validation")
+    if isinstance(validation, dict):
+        return validation
+    return metrics
+
+
 def parse_model_rows(rows: list[dict[str, str]]) -> list[ModelRow]:
     parsed: list[ModelRow] = []
     for row in rows:
@@ -20,6 +29,8 @@ def parse_model_rows(rows: list[dict[str, str]]) -> list[ModelRow]:
         payload["task"] = payload.get("task") or "classification"
         if "model_path" not in payload:
             payload["model_path"] = payload.get("prompt_path", "")
+        payload["training_size_days"] = int(payload.get("training_size_days") or 90)
+        payload["test_size_days"] = int(payload.get("test_size_days") or 7)
         payload["parent_id"] = _clean_optional(payload.get("parent_id", ""))
         payload["log"] = payload.get("log", "")
         parsed.append(ModelRow.model_validate(payload))
@@ -35,7 +46,7 @@ def parse_experiment_rows(rows: list[dict[str, str]]) -> list[ExperimentRow]:
         metrics_raw = payload.get("metrics", "")
         metrics: dict[str, object] | None = None
         if metrics_raw:
-            metrics = json.loads(metrics_raw)
+            metrics = _extract_task_metrics(json.loads(metrics_raw))
         else:
             validation_legacy_keys = [
                 "validation_n_samples",
@@ -69,11 +80,10 @@ def parse_experiment_rows(rows: list[dict[str, str]]) -> list[ExperimentRow]:
                 if value is not None:
                     metric_key = key.removeprefix("test_")
                     test_metrics[metric_key] = float(value) if metric_key != "n_samples" else int(value)
-            if validation_metrics or test_metrics:
-                metrics = {
-                    "validation": validation_metrics,
-                    "test": test_metrics,
-                }
+            if validation_metrics:
+                metrics = validation_metrics
+            elif test_metrics:
+                metrics = test_metrics
         payload["metrics"] = metrics
         for key in ["started_at_utc", "finished_at_utc", "error"]:
             payload[key] = _clean_optional(payload.get(key, ""))

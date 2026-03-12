@@ -4,7 +4,7 @@ AutoQuant is an autonomous financial research agent trained at the top quant hed
 
 ## How it works
 
-Autoquant can runs research loops to find the best predictive model over a given financial ticker dataset. A run is an isolated experiment workspace with its own models, experiments, predictions, and charts.
+Autoquant can run research loops/runs to find the best predictive model over a given financial ticker dataset. A run is an isolated experiment workspace with its own models, experiments, predictions, and charts.
 
 
 ## Bootstrap
@@ -70,7 +70,7 @@ Setup goals:
 
 ## Updates
 
-The update workflow is under UPDATE.md
+The update workflow is under https://github.com/dev0xx1/autoquant/blob/main/UPDATE.md
 
 ## Commands
 
@@ -81,67 +81,160 @@ Use:
 - `autoquant --help` to list all commands with their descriptions.
 - `autoquant <command> --help` to see arguments and usage for one command.
 
+Current command set:
+
+- `init-run`
+- `prepare-data`
+- `experiments-list`
+- `run-experiment`
+- `run-generation`
+- `generate-model`
+- `validate-model`
+- `list-models`
+- `get-model`
+- `get-learning-tree`
+- `read-predictions`
+- `visualize-learning`
+- `get-run-metadata`
+- `get-generation-summary`
+- `get-run-status`
+- `get-runs-summary`
+
 
 ## Research loop
 
 Use this research loop to iterate over models and maximize your objective function
 
 
+## Training Dataset
+
+AutoQuant trains on per-run OHLCV market data stored at `data/prices.csv`.
+
+### Source and collection
+
+- Data source: Massive/Polygon aggregates API.
+- Granularity: `1 hour` candles (`multiplier=1`, `timespan="hour"`).
+- Collection command: `prepare-data`.
+- Date window:
+  - Run metadata defines `from_date` and `to_date`.
+  - Actual fetch starts `30 days` earlier than `from_date` to provide historical context for feature engineering windows.
+
+### Stored schema (`data/prices.csv`)
+
+Every row is persisted with:
+
+- `timestamp` ISO-8601 UTC string.
+- `ticker` instrument symbol.
+- `open` numeric string.
+- `high` numeric string.
+- `low` numeric string.
+- `close` numeric string.
+- `volume` numeric string (may be empty before cleaning).
+
+Rows are upserted on the unique key `["timestamp", "ticker"]`.
+
+### Runtime data model used for training
+
+When a model calls `load_dataset(run_id)`, AutoQuant converts `data/prices.csv` into a validated pandas DataFrame with this contract:
+
+- Required columns: `timestamp`, `open`, `high`, `low`, `close`, `volume`.
+- Sorted ascending by `timestamp`.
+- `open/high/low/close/volume` coerced to numeric.
+- Rows with missing/invalid numeric OHLCV values are removed.
+- Minimum size requirement: at least `220` rows after cleaning.
+
+Model scripts then build features and a single `target` column before splitting.
+
+
 ### New Run 
 
-1. `run-init` with explicit settings and `--task classification|regression`.
-2. `prepare-data`.
-3. `run-generation` once to execute pending seed experiments.
+1. `init-run` with explicit settings and `--task classification|regression`.
+   - `--train-time-limit <minutes>` sets the hyperparameter search wall-clock budget per experiment.
+   - Default is `5` minutes.
+2. `prepare-data` to download training data
 
-### Autonomous Loop
+### Research Loop
 
 Repeat until stop condition. Can run for existing run_id.
 
-1. Get state of latest generation: `get-generation-summary --run_id <id>`.
-2. Stop if:
-   - completed experiments reached `max_experiments`
-   - or we stop learning for more than 5 generations
-else if we have pending experiments we do `run-generation --run_id <id>`
-3. `get-learning-tree --run_id <id>` to review results and your learning history to decide
-on the next generation of models
-4. Create the next generation of models to `~/Documents/generated_models/<uuid>.py`.
-5. For each model:
-   - `model-validate --run_id <id> --model_path <path-to-model.py>`
-   - `model-validate` runs the model with `$AUTOQUANT_WORKSPACE/venv/autoquant/bin/python`
-   - if validation fails because a dependency is missing, install the missing package in the AutoQuant virtualenv, then re-run `model-validate`
-   - if invalid, fix file and re-run `model-validate`
-  - if valid, `generate-model` with required `--name` and explicit `--parent_id` and `--generation`
-6. `run-generation --run_id <id>`.
-7. `experiments-list --run_id <id> --status pending` and `get-generation-summary --run_id <id>`.
-8. `visualize-learning --run_id <id>`
-9. `get-runs-summary`
-10. Continue from step 1.
+1. Review current generation progress and pending work.
+2. If experiments are pending, run them.
+3. Review the learning tree and recent outcomes to decide the next generation direction.
+4. Create and validate candidate models, then register validated models with explicit lineage and generation.
+5. Execute the new generation of experiments.
+6. Stop if completed experiments already reached the run limit, or if learning has stagnated for multiple generations.
+7. Repeat from step 1 until your stop condition is met.
 
 
+## Experiments metrics contract
 
-## Model Contract
+`data/experiments.csv` has one JSON field named `metrics`.
 
-Each model is a Python file under `$AUTOQUANT_WORKSPACE/runs/<run_id>/models/` and follows a `train.py` script contract:
+- On failed experiments:
+  - `status=failed`
+  - `error` contains the failure message
+  - `metrics` is empty
+- On completed experiments:
+  - `status=completed`
+  - `error` is empty
+  - `metrics` is a direct task metrics dict
+    - classification example keys: `accuracy`, `f1`, `macro_f1`, `weighted_f1`, `n_samples`
+    - regression example keys: `mae`, `mse`, `rmse`, `r2`, `explained_variance`, `median_ae`, `max_error`, `n_samples`
 
-- It has full discretion to choose feature engineering, target construction, model family, and hyperparameters.
-- It must define a callable `main()` with no arguments.
-- It must define the model task[classification/regression] and the run_id as variables.
-- It must use `core/utils/data_util.py` helpers:
-  - `load_dataset(run_id)` for validated and normalized OHLCV data.
-  - `get_splits(df, feature_names)` for chronological `60/20/20` split and `x/y` extraction.
-- It must use `core/utils/model_util.py:eval(...)` for evaluation payload output.
-- It must avoid look-ahead bias and keep one prediction horizon per training execution.
-- It must return only the output from `eval(...)`: a dictionary with exactly `validation` and `test` metric sections.
-- For `classification`, metrics are sourced from `classification_report(..., output_dict=True)` plus derived summary keys.
+The persisted `metrics` field does not include runtime logs such as stdout/stderr.
+
+
+## How to write a model
+
+Each model file in `$AUTOQUANT_WORKSPACE/runs/<run_id>/models/` should contain exactly one concrete class that subclasses `core/model_base.py:AutoQuantModel`.
+
+Minimal interface contract:
+
+```python
+class MyModel(AutoQuantModel):
+    def create_features(self, frame: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+        ...
+
+    def get_hyperparameter_candidates(self) -> list[dict[str, object]]:
+        return [{}]
+
+    def fit(self, x_train: pd.DataFrame, y_train: pd.Series, hyperparams: dict[str, object]) -> None:
+        ...
+
+    def predict(self, x_test: pd.DataFrame) -> list[float | int]:
+        ...
+```
+
+Write only the model logic class:
+
+1. Implement `create_features(frame)` to build feature columns and `target`, and return `(prepared_frame, feature_names)`.
+2. Optionally implement `get_hyperparameter_candidates()` to return candidate dicts for your search.
+3. Implement `fit(x_train, y_train, hyperparams)` as the training hook over whatever transformed input matrix/target vectors your model design uses for the current walk-forward window.
+4. Implement `predict(x_test)` as the inference hook over whatever transformed input matrix your model expects for that window.
+5. Keep the file class-only. Do not add `argparse`, `main()`, `if __name__ == "__main__"`, or `TRAIN_OUTPUT`.
+
+Runtime behavior:
+
+- AutoQuant loads the model file, discovers the single `AutoQuantModel` subclass, instantiates it, and calls `run(...)`.
+- `run(...)` uses framework-standard `prepare_data`, `split_data`, `validate_model`, hyperparameter search, and validation evaluation.
+- Hyperparameter search happens on the train partition and is capped by run metadata `train_time_limit_minutes` (default `5`).
+- Candidate selection metric is `weighted_f1` for classification and `r2` for regression.
+- Validation uses the selected hyperparameters and runs walk-forward only on the validation partition.
+- Walk-forward orchestration is framework-owned in `AutoQuantModel`.
+- `fit(...)` and `predict(...)` are framework interface hooks for arbitrary model families; the framework provides window-specific datasets and your implementation defines how they are consumed.
+- `artifacts` is a model instance cache dictionary reset by framework at each walk-forward step.
+- The final output must be a dict with exactly `train` and `validation` metric sections.
+- For `classification`, metrics come from `classification_report(..., output_dict=True)` plus summary keys.
 - For `regression`, metrics include `mae`, `mse`, `rmse`, `r2`, `explained_variance`, `median_ae`, `max_error`.
 
-Validation constraints:
+Failure cases:
 
-- The model file must pass runtime contract validation through `model-validate`
-- Disallowed dynamic and system calls are rejected during validation
-- The returned `validation` and `test` metric dictionaries must match the run task contract
+- Zero subclasses in file: validation/execution fails.
+- More than one concrete subclass in file: validation/execution fails.
+- Output shape different from `{train, validation}`: validation/execution fails.
+- Missing `fit(...)` or `predict(...)`: validation/execution fails.
 
-Use `core/seed_model.py` as the baseline template (LogisticRegression seed).
+Use `core/seed_train.py` as the baseline template.
 
 
 ## Failure Handling
@@ -153,20 +246,21 @@ Use `core/seed_model.py` as the baseline template (LogisticRegression seed).
 
 Each run creates `$AUTOQUANT_WORKSPACE/runs/<run_id>/`:
 
-- `metadata.json` (includes `autoquant_commit_hash`)
-- `settings.json`
+- `metadata.json` (flat run metadata, including `autoquant_commit_hash`, `task`, `objective_function`, `max_experiments`, `max_concurrent_models`, `train_time_limit_minutes`, `min_news_coverage`, `current_generation`)
 - `data/news.csv`
 - `data/prices.csv` with `timestamp,ticker,open,high,low,close,volume`
 - `data/models.csv`
 - `data/predictions.csv`
 - `data/experiments.csv`
+- `data/lineage_graph.json`
 - `data/data_report.txt`
-- `models/*.py`
+- `models/{sanitized_name}_{model_id}.py` or `models/{model_id}.py` if the sanitized name is empty
 - `charts/*.png`
 
 
 ## Rules
-- Never write or read files from Documents/autoquant directly. Use commands only.
+
+- Never write to Documents/autoquant directly. Use commands only. You only have READ access to your workspace outside of autoquant CLI.
 - Only use your learning tree as input to create the next generation.
 
 ## OpenClaw Knowledge Placement

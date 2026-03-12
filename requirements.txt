@@ -1,11 +1,9 @@
-litellm
 matplotlib
 pydantic
 PyYAML
 python-dotenv
 polygon-api-client
 networkx
-langfuse
 numpy
 scikit-learn
 pandas

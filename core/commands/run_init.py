@@ -4,18 +4,17 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from core.constants import RUN_SETTINGS_JSON
+from core.constants import RUN_META_JSON
 from core.graph import init_graph
-from core.utils.io_util import write_json
 from core.paths import run_dir
-from core.schemas import RunMeta, Settings
+from core.schemas import RunMeta
 from core.utils.git_util import current_repo_commit_hash
 from core.utils.time_utils import now_utc
 
 from .model_create import model_create
 from .shared import ensure_run_layout, write_run_meta
 
-SEED_MODEL_PATH = Path(__file__).resolve().parent.parent / "seed_model.py"
+SEED_MODEL_PATH = Path(__file__).resolve().parent.parent / "seed_train.py"
 
 
 def run_init(
@@ -24,47 +23,38 @@ def run_init(
     from_date: str,
     to_date: str,
     task: str,
-    available_predictor_models: list[str] | None = None,
-    llm_temperature: float | None = None,
-    llm_max_tokens: int | None = None,
     max_experiments: int | None = None,
     max_concurrent_models: int | None = None,
-    prediction_time: str | None = None,
-    prediction_time_timezone: str | None = None,
+    train_time_limit_minutes: float | None = None,
     objective_function: str | None = None,
     min_news_coverage: float | None = None,
     seed_model_path: str | None = None,
+    seed_training_size_days: int = 90,
+    seed_test_size_days: int = 7,
 ) -> dict[str, Any]:
     if not run_id:
         run_id = uuid.uuid4().hex[:8]
     target_run_dir = run_dir(run_id)
-    defaults = Settings().model_dump(mode="json")
+    defaults = RunMeta(run_id=run_id, ticker=ticker, from_date=from_date, to_date=to_date, created_at_utc=now_utc()).model_dump(mode="json")
     objective = objective_function
     if objective is None:
         objective = "r2" if task == "regression" else defaults["objective_function"]
-    settings = Settings.model_validate(
-        {
-            "task": task,
-            "available_predictor_models": available_predictor_models if available_predictor_models is not None else defaults["available_predictor_models"],
-            "llm_temperature": llm_temperature if llm_temperature is not None else defaults["llm_temperature"],
-            "llm_max_tokens": llm_max_tokens if llm_max_tokens is not None else defaults["llm_max_tokens"],
-            "max_experiments": max_experiments if max_experiments is not None else defaults["max_experiments"],
-            "max_concurrent_models": max_concurrent_models if max_concurrent_models is not None else defaults["max_concurrent_models"],
-            "prediction_time": prediction_time if prediction_time is not None else defaults["prediction_time"],
-            "prediction_time_timezone": prediction_time_timezone if prediction_time_timezone is not None else defaults["prediction_time_timezone"],
-            "objective_function": objective,
-            "min_news_coverage": min_news_coverage if min_news_coverage is not None else defaults["min_news_coverage"],
-        }
-    )
     target_run_dir.parent.mkdir(parents=True, exist_ok=True)
     ensure_run_layout(target_run_dir)
-    write_json(target_run_dir / RUN_SETTINGS_JSON, settings.model_dump(mode="json"))
     init_graph(target_run_dir)
     meta = RunMeta(
         run_id=run_id,
         ticker=ticker,
         from_date=from_date,
         to_date=to_date,
+        task=task,
+        objective_function=objective,
+        max_experiments=max_experiments if max_experiments is not None else defaults["max_experiments"],
+        max_concurrent_models=max_concurrent_models if max_concurrent_models is not None else defaults["max_concurrent_models"],
+        train_time_limit_minutes=(
+            train_time_limit_minutes if train_time_limit_minutes is not None else defaults["train_time_limit_minutes"]
+        ),
+        min_news_coverage=min_news_coverage if min_news_coverage is not None else defaults["min_news_coverage"],
         current_generation=0,
         created_at_utc=now_utc(),
         autoquant_commit_hash=current_repo_commit_hash(),
@@ -80,6 +70,8 @@ def run_init(
         content=seed_content,
         log="seed model",
         reasoning="initial seed",
+        training_size_days=seed_training_size_days,
+        test_size_days=seed_test_size_days,
         generation=0,
         parent_id=None,
     )
@@ -89,7 +81,7 @@ def run_init(
         "ticker": ticker,
         "from_date": from_date,
         "to_date": to_date,
-        "task": settings.task,
-        "settings_path": str(target_run_dir / RUN_SETTINGS_JSON),
+        "task": meta.task,
+        "metadata_path": str(target_run_dir / RUN_META_JSON),
         "seed_model_id": seed_result["model_id"],
     }

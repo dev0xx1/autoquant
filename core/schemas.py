@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Literal, Optional
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -12,17 +11,14 @@ class PredictionLabel(str, Enum):
     DOWN = "DOWN"
 
 
-class PredictionResponse(BaseModel):
-    reasoning: str
-    prediction: PredictionLabel
-
-
 class ModelRow(BaseModel):
     name: str
     model_id: str
     generation: int = 0
     task: Literal["classification", "regression"] = "classification"
     model_path: str
+    training_size_days: int = Field(default=30, ge=1)
+    test_size_days: int = Field(default=7, ge=1)
     parent_id: Optional[str] = None
     reasoning: Optional[str] = ""
     log: Optional[str] = ""
@@ -59,38 +55,15 @@ class RunMeta(BaseModel):
     ticker: str
     from_date: str
     to_date: str
+    task: Literal["classification", "regression"] = "classification"
+    objective_function: str = "macro_f1"
+    max_experiments: int = 8
+    max_concurrent_models: int = Field(default=4, ge=1, le=4)
+    train_time_limit_minutes: float = Field(default=5.0, gt=0)
+    min_news_coverage: float = Field(default=50.0, ge=0, le=100)
     current_generation: int = 0
     created_at_utc: str
     autoquant_commit_hash: str | None = None
-
-
-class Settings(BaseModel):
-    available_predictor_models: list[str] = ["gemini/gemini-2.5-flash"]
-    llm_temperature: float = 0
-    llm_max_tokens: int = 65536
-    max_experiments: int = 8
-    max_concurrent_models: int = Field(default=4, ge=1, le=4)
-    prediction_time: str = "17:00"
-    prediction_time_timezone: str = "UTC"
-    task: Literal["classification", "regression"] = "classification"
-    objective_function: str = "macro_f1"
-    min_news_coverage: float = Field(default=50.0, ge=0, le=100)
-
-    @field_validator("prediction_time")
-    @classmethod
-    def validate_prediction_time(cls, v: str) -> str:
-        hour_str, minute_str = v.split(":")
-        hour = int(hour_str)
-        minute = int(minute_str)
-        if len(hour_str) != 2 or len(minute_str) != 2 or hour < 0 or hour > 23 or minute < 0 or minute > 59:
-            raise ValueError("prediction_time must be HH:MM in 24-hour format")
-        return v
-
-    @field_validator("prediction_time_timezone")
-    @classmethod
-    def validate_prediction_time_timezone(cls, v: str) -> str:
-        ZoneInfo(v)
-        return v
 
     @field_validator("objective_function")
     @classmethod

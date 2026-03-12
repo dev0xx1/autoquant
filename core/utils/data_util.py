@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 from core.constants import PRICES_CSV
 from core.paths import run_dir
@@ -34,25 +35,24 @@ def load_dataset(run_id: str) -> pd.DataFrame:
 
 def get_splits(
     df: pd.DataFrame, feature_names: list[str]
-) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
     if len(df) < 80:
         raise RuntimeError("Not enough rows to split")
-    train_end = int(len(df) * 0.6)
-    test_end = train_end + int(len(df) * 0.2)
-    train_df = df.iloc[:train_end].reset_index(drop=True)
-    test_df = df.iloc[test_end:].reset_index(drop=True)
-    val_df = df.iloc[train_end:test_end].reset_index(drop=True)
+    train_df, val_df = train_test_split(df, test_size=0.2, shuffle=False)
+    train_df = train_df.reset_index(drop=True)
+    val_df = val_df.reset_index(drop=True)
 
     if train_df["target"].nunique() < 2:
         raise RuntimeError("Train target needs both classes")
-    
-    if train_df.empty or test_df.empty or val_df.empty:
-        raise RuntimeError("Invalid train/test/val split")
+
+    if val_df["target"].nunique() < 2:
+        raise RuntimeError("Validation target needs both classes")
+
+    if train_df.empty or val_df.empty:
+        raise RuntimeError("Invalid train/validation split")
     return (
         train_df[feature_names],
         train_df["target"],
         val_df[feature_names],
         val_df["target"],
-        test_df[feature_names],
-        test_df["target"],
     )
