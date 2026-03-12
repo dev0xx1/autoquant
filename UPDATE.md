@@ -14,6 +14,6 @@ Running an autoquant update works like this:
 update user on progress so far and wait for approval before making changes.
 
 4) when ready to make an update, run:
-   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install --upgrade --force-reinstall "git+https://github.com/dev0xx1/autoquant.git@main#subdirectory=autoquant"
+   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install --upgrade --force-reinstall "git+https://github.com/dev0xx1/autoquant.git@main"
 
 5) Update your prompts as planned in step 3

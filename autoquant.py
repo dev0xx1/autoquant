@@ -49,7 +49,6 @@ def run_init_command(
     max_concurrent_models: Annotated[int, typer.Option()] = 4,
     train_time_limit: Annotated[float, typer.Option()] = 5.0,
     objective_function: Annotated[Literal["accuracy", "f1", "macro_f1", "weighted_f1", "r2"] | None, typer.Option()] = None,
-    min_news_coverage: Annotated[float, typer.Option()] = 50.0,
     seed_model_path: Annotated[str, typer.Option()] = "",
     run_id: Annotated[str, typer.Option()] = "",
 ) -> None:
@@ -64,7 +63,6 @@ def run_init_command(
             max_concurrent_models,
             train_time_limit,
             objective_function,
-            min_news_coverage,
             seed_model_path=(seed_model_path or None),
         )
     )

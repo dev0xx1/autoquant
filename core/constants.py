@@ -1,7 +1,6 @@
 MODELS_CSV = "data/models.csv"
 EXPERIMENTS_CSV = "data/experiments.csv"
 PREDICTIONS_CSV = "data/predictions.csv"
-NEWS_CSV = "data/news.csv"
 PRICES_CSV = "data/prices.csv"
 DATA_REPORT_TXT = "data/data_report.txt"
 RUN_DATA_DIR = "data"

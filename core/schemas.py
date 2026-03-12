@@ -60,7 +60,6 @@ class RunMeta(BaseModel):
     max_experiments: int = 8
     max_concurrent_models: int = Field(default=4, ge=1, le=4)
     train_time_limit_minutes: float = Field(default=5.0, gt=0)
-    min_news_coverage: float = Field(default=50.0, ge=0, le=100)
     current_generation: int = 0
     created_at_utc: str
     autoquant_commit_hash: str | None = None

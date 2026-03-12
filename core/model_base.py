@@ -62,6 +62,7 @@ class AutoQuantModel(ABC):
         frame: pd.DataFrame,
         training_size_days: int,
         test_size_days: int,
+        first_test_at_start: bool = False,
     ) -> int:
         if frame.empty:
             return 0
@@ -74,6 +75,7 @@ class AutoQuantModel(ABC):
                 end_ts=end_ts,
                 training_size_days=training_size_days,
                 test_size_days=test_size_days,
+                first_test_at_start=first_test_at_start,
             )
         )
 
@@ -84,11 +86,13 @@ class AutoQuantModel(ABC):
         training_size_days: int,
         test_size_days: int,
         min_windows: int,
+        first_test_at_start: bool = False,
     ) -> None:
         attempted = self._get_attempted_window_count(
             frame=frame,
             training_size_days=training_size_days,
             test_size_days=test_size_days,
+            first_test_at_start=first_test_at_start,
         )
         if attempted < min_windows:
             raise RuntimeError(
@@ -105,6 +109,13 @@ class AutoQuantModel(ABC):
     ) -> None:
         if training_size_days <= 0 or test_size_days <= 0:
             raise RuntimeError("training_size_days and test_size_days must be > 0")
+        validation_start = validation_frame["timestamp"].min()
+        lookback_start = validation_start - pd.Timedelta(days=training_size_days)
+        if train_frame["timestamp"].min() > lookback_start:
+            raise RuntimeError(
+                f"Train partition does not provide enough lookback for validation: need data from {lookback_start} "
+                f"but train starts at {train_frame['timestamp'].min()}"
+            )
         self._enforce_min_windows(
             partition_name="train",
             frame=train_frame,
@@ -118,6 +129,7 @@ class AutoQuantModel(ABC):
             training_size_days=training_size_days,
             test_size_days=test_size_days,
             min_windows=2,
+            first_test_at_start=True,
         )
 
     def evaluate(
@@ -157,11 +169,19 @@ class AutoQuantModel(ABC):
         training_size_days: int,
         test_size_days: int,
         hyperparams: dict[str, object],
+        test_range_start_ts: pd.Timestamp | None = None,
+        test_range_end_ts: pd.Timestamp | None = None,
     ) -> tuple[list[float | int], list[float | int]]:
         if frame.empty:
             raise RuntimeError("Partition is empty")
-        start_ts = frame["timestamp"].min()
-        end_ts = frame["timestamp"].max()
+        if test_range_start_ts is not None and test_range_end_ts is not None:
+            start_ts = test_range_start_ts
+            end_ts = test_range_end_ts
+            first_test_at_start = True
+        else:
+            start_ts = frame["timestamp"].min()
+            end_ts = frame["timestamp"].max()
+            first_test_at_start = False
         actual: list[float | int] = []
         pred: list[float | int] = []
         for train_start_ts, test_start_ts, test_end_ts in walk_forward(
@@ -169,6 +189,7 @@ class AutoQuantModel(ABC):
             end_ts=end_ts,
             training_size_days=training_size_days,
             test_size_days=test_size_days,
+            first_test_at_start=first_test_at_start,
         ):
             train_window = frame[(frame["timestamp"] >= train_start_ts) & (frame["timestamp"] < test_start_ts)]
             test_window = frame[(frame["timestamp"] >= test_start_ts) & (frame["timestamp"] < test_end_ts)]
@@ -269,12 +290,17 @@ class AutoQuantModel(ABC):
         self.train(train_frame, feature_names, training_size_days, test_size_days, train_time_limit_minutes)
         if self.train_metrics is None:
             raise RuntimeError("Training search did not produce metrics")
+        combined_frame = pd.concat([train_frame, validation_frame], ignore_index=True)
+        validation_start = validation_frame["timestamp"].min()
+        validation_end = validation_frame["timestamp"].max()
         validation_actual, validation_pred = self._walk_forward_predict(
-            validation_frame,
+            combined_frame,
             feature_names,
             training_size_days,
             test_size_days,
             self.best_hyperparams,
+            test_range_start_ts=validation_start,
+            test_range_end_ts=validation_end,
         )
         validation_metrics = self._metrics_from_predictions(validation_actual, validation_pred)
         train_metrics = dict(self.train_metrics)

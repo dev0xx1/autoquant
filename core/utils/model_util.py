@@ -18,8 +18,14 @@ TASK_CLASSIFICATION = "classification"
 TASK_REGRESSION = "regression"
 
 
-def walk_forward(start_ts: pd.Timestamp, end_ts: pd.Timestamp, training_size_days: int, test_size_days: int = 7):
-    test_start_ts = start_ts + pd.Timedelta(days=training_size_days)
+def walk_forward(
+    start_ts: pd.Timestamp,
+    end_ts: pd.Timestamp,
+    training_size_days: int,
+    test_size_days: int = 7,
+    first_test_at_start: bool = False,
+):
+    test_start_ts = start_ts if first_test_at_start else start_ts + pd.Timedelta(days=training_size_days)
     while test_start_ts < end_ts:
         test_end_ts = min(test_start_ts + pd.Timedelta(days=test_size_days), end_ts + pd.Timedelta(microseconds=1))
         train_start_ts = test_start_ts - pd.Timedelta(days=training_size_days)

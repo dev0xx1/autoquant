@@ -10,7 +10,6 @@ from core.constants import (
     MODEL_FIELDNAMES,
     MODELS_CSV,
     MODELS_DIR,
-    NEWS_CSV,
     PREDICTIONS_CSV,
     PRICES_CSV,
     RUN_DATA_DIR,
@@ -57,7 +56,6 @@ def ensure_run_layout(target_run_dir: Path) -> None:
         target_run_dir / PREDICTIONS_CSV,
         ["ticker", "date", "model_id", "reasoning", "prediction", "actual", "is_correct", "created_at_utc"],
     )
-    ensure_csv_header(target_run_dir / NEWS_CSV, ["ticker", "timestamp", "date", "title", "content", "summary", "url"])
     ensure_csv_header(target_run_dir / PRICES_CSV, ["timestamp", "ticker", "open", "high", "low", "close", "volume"])
 
 

@@ -224,8 +224,7 @@ Use `core/seed_train.py` as the baseline template.
 
 Each run creates `$AUTOQUANT_WORKSPACE/runs/<run_id>/`:
 
-- `metadata.json` (flat run metadata, including `autoquant_commit_hash`, `task`, `objective_function`, `max_experiments`, `max_concurrent_models`, `train_time_limit_minutes`, `min_news_coverage`, `current_generation`)
-- `data/news.csv`
+- `metadata.json` (flat run metadata, including `autoquant_commit_hash`, `task`, `objective_function`, `max_experiments`, `max_concurrent_models`, `train_time_limit_minutes`, `current_generation`)
 - `data/prices.csv` with `timestamp,ticker,open,high,low,close,volume`
 - `data/models.csv`
 - `data/predictions.csv`

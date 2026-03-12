@@ -27,7 +27,6 @@ def run_init(
     max_concurrent_models: int | None = None,
     train_time_limit_minutes: float | None = None,
     objective_function: str | None = None,
-    min_news_coverage: float | None = None,
     seed_model_path: str | None = None,
     seed_training_size_days: int = 30,
     seed_test_size_days: int = 7,
@@ -54,7 +53,6 @@ def run_init(
         train_time_limit_minutes=(
             train_time_limit_minutes if train_time_limit_minutes is not None else defaults["train_time_limit_minutes"]
         ),
-        min_news_coverage=min_news_coverage if min_news_coverage is not None else defaults["min_news_coverage"],
         current_generation=0,
         created_at_utc=now_utc(),
         autoquant_commit_hash=current_repo_commit_hash(),
