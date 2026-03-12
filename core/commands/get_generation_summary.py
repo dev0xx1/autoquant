@@ -8,7 +8,7 @@ from core.research import get_pending_experiments
 from .shared import read_run_meta
 
 
-def get_generation_state(run_id: str) -> dict[str, Any]:
+def get_generation_summary(run_id: str) -> dict[str, Any]:
     meta = read_run_meta(run_id)
     pending = get_pending_experiments(run_dir(run_id), meta.ticker, meta.from_date, meta.to_date)
     grouped: dict[int, int] = {}

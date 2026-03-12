@@ -10,7 +10,7 @@ from core.utils.storage import parse_experiment_rows, read_csv
 from .shared import read_run_meta
 
 
-def experiment_run(run_id: str, model_id: str) -> dict[str, Any]:
+def run_experiment(run_id: str, model_id: str) -> dict[str, Any]:
     meta = read_run_meta(run_id)
     rows = parse_experiment_rows(read_csv(run_dir(run_id) / EXPERIMENTS_CSV))
     exp = next(

@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-BASE_DIR="${AUTOQUANT_WORKSPACE:-$HOME/Documents/autoquant}"
-if [[ ! -x "$BASE_DIR/venv/autoquant/bin/python" || ! -f "$BASE_DIR/autoquant/autoquant.py" ]]; then
-  BASE_DIR="$(pwd)/autoquant"
-fi
-"$BASE_DIR/venv/autoquant/bin/python" "$BASE_DIR/autoquant/autoquant.py" "$@"

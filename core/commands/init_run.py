@@ -11,13 +11,17 @@ from core.schemas import RunMeta
 from core.utils.git_util import current_repo_commit_hash
 from core.utils.time_utils import now_utc
 
-from .model_create import model_create
+from .register_model import create_model
 from .shared import ensure_run_layout, write_run_meta
 
 SEED_MODEL_PATH = Path(__file__).resolve().parent.parent / "seed_train.py"
+DEFAULT_MAX_EXPERIMENTS = int(RunMeta.model_fields["max_experiments"].default)
+DEFAULT_MAX_CONCURRENT_MODELS = int(RunMeta.model_fields["max_concurrent_models"].default)
+DEFAULT_TRAIN_TIME_LIMIT_MINUTES = float(RunMeta.model_fields["train_time_limit_minutes"].default)
+DEFAULT_CLASSIFICATION_OBJECTIVE = str(RunMeta.model_fields["objective_function"].default)
 
 
-def run_init(
+def init_run(
     run_id: str,
     ticker: str,
     from_date: str,
@@ -34,10 +38,7 @@ def run_init(
     if not run_id:
         run_id = uuid.uuid4().hex[:8]
     target_run_dir = run_dir(run_id)
-    defaults = RunMeta(run_id=run_id, ticker=ticker, from_date=from_date, to_date=to_date, created_at_utc=now_utc()).model_dump(mode="json")
-    objective = objective_function
-    if objective is None:
-        objective = "r2" if task == "regression" else defaults["objective_function"]
+    objective = objective_function or ("r2" if task == "regression" else DEFAULT_CLASSIFICATION_OBJECTIVE)
     target_run_dir.parent.mkdir(parents=True, exist_ok=True)
     ensure_run_layout(target_run_dir)
     init_graph(target_run_dir)
@@ -48,10 +49,10 @@ def run_init(
         to_date=to_date,
         task=task,
         objective_function=objective,
-        max_experiments=max_experiments if max_experiments is not None else defaults["max_experiments"],
-        max_concurrent_models=max_concurrent_models if max_concurrent_models is not None else defaults["max_concurrent_models"],
+        max_experiments=max_experiments if max_experiments is not None else DEFAULT_MAX_EXPERIMENTS,
+        max_concurrent_models=max_concurrent_models if max_concurrent_models is not None else DEFAULT_MAX_CONCURRENT_MODELS,
         train_time_limit_minutes=(
-            train_time_limit_minutes if train_time_limit_minutes is not None else defaults["train_time_limit_minutes"]
+            train_time_limit_minutes if train_time_limit_minutes is not None else DEFAULT_TRAIN_TIME_LIMIT_MINUTES
         ),
         current_generation=0,
         created_at_utc=now_utc(),
@@ -62,7 +63,7 @@ def run_init(
     if not seed_path.exists():
         raise RuntimeError(f"Seed model not found: {seed_path}")
     seed_content = seed_path.read_text(encoding="utf-8")
-    seed_result = model_create(
+    seed_result = create_model(
         run_id=run_id,
         name="seed",
         content=seed_content,

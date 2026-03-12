@@ -10,7 +10,7 @@ from core.utils.storage import parse_experiment_rows, read_csv
 from .shared import read_run_meta, write_run_meta
 
 
-def generation_run(run_id: str, max_workers: int | None = None) -> dict[str, Any]:
+def run_generation(run_id: str, max_workers: int | None = None) -> dict[str, Any]:
     meta = read_run_meta(run_id)
     completed_before = len([row for row in parse_experiment_rows(read_csv(run_dir(run_id) / EXPERIMENTS_CSV)) if row.status == "completed"])
     model_ids = run_generation(run_dir(run_id), meta, meta.ticker, meta.from_date, meta.to_date, max_workers=max_workers)

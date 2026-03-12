@@ -13,7 +13,11 @@ Running an autoquant update works like this:
 3) make a concrete list of changes to make to your own prompts and knowledge base. 
 update user on progress so far and wait for approval before making changes.
 
-4) when ready to make an update, run:
+4) when ready to make an update, source env and run:
+   ```bash
+   set -a
+   source "$HOME/.openclaw/.env"
+   set +a
    "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install --upgrade --force-reinstall "git+https://github.com/dev0xx1/autoquant.git@main"
-
+   ```
 5) Update your prompts as planned in step 3

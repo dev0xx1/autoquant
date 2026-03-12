@@ -1,28 +1,29 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Annotated, Literal
 
 import typer
 
 from core.commands import (
-    experiment_run,
+    run_experiment,
     experiments_list,
-    generation_run,
+    write_generation_report,
+    run_generation,
     prepare_data,
     get_learning_tree,
-    get_generation_state,
-    model_create,
-    model_list,
-    model_read,
-    model_validate,
-    predictions_read,
-    run_metadata_get,
-    runs_summary,
-    run_init,
-    run_status,
-    visualize,
+    get_generation_summary,
+    register_model,
+    list_models,
+    get_model,
+    validate_model,
+    read_predictions,
+    get_run_metadata,
+    get_runs_summary,
+    init_run,
+    get_run_status,
+    visualize_learning,
+    status,
 )
 
 
@@ -36,9 +37,28 @@ def _print(payload: object) -> None:
     print(json.dumps(payload, ensure_ascii=True))
 
 
-@app.command(
+def _empty_to_none(value: str) -> str | None:
+    return value or None
+
+
+def _register(name: str, help_text: str):
+    def decorator(func):
+        return app.command(name, help=help_text)(func)
+
+    return decorator
+
+
+@_register(
+    "status",
+    "Check required environment variables and workspace configuration.",
+)
+def status_command() -> None:
+    _print(status())
+
+
+@_register(
     "init-run",
-    help="Initialize a run with metadata and seed model experiments. Returns run metadata and initial experiment registration details.",
+    "Initialize a run with metadata and seed model experiments. Returns run metadata and initial experiment registration details.",
 )
 def run_init_command(
     ticker: Annotated[str, typer.Option(...)],
@@ -53,7 +73,7 @@ def run_init_command(
     run_id: Annotated[str, typer.Option()] = "",
 ) -> None:
     _print(
-        run_init(
+        init_run(
             run_id,
             ticker,
             from_date,
@@ -68,52 +88,64 @@ def run_init_command(
     )
 
 
-@app.command(
+@_register(
     "prepare-data",
-    help="Fetch and store run OHLCV data for the configured ticker/date range. Returns sync status and data summary.",
+    "Fetch and store run OHLCV data for the configured ticker/date range. Returns sync status and data summary.",
 )
 def prepare_data_command(run_id: Annotated[str, typer.Option(...)]) -> None:
     _print(prepare_data(run_id))
 
 
-@app.command(
+@_register(
     "experiments-list",
-    help="List experiments for a run, optionally filtered by status. Returns experiment records.",
+    "List experiments for a run, optionally filtered by status. Returns experiment records.",
 )
 def experiments_list_command(
     run_id: Annotated[str, typer.Option(...)],
     status: Annotated[str, typer.Option()] = "",
 ) -> None:
-    _print(experiments_list(run_id, status=(status or None)))
+    _print(experiments_list(run_id, status=_empty_to_none(status)))
 
 
-@app.command(
+@_register(
     "run-experiment",
-    help="Execute one experiment for a specific model in a run. Returns execution result and metrics payload.",
+    "Execute one experiment for a specific model in a run. Returns execution result and metrics payload.",
 )
 def experiment_run_command(
     run_id: Annotated[str, typer.Option(...)],
     model_id: Annotated[str, typer.Option(...)],
 ) -> None:
-    _print(experiment_run(run_id, model_id))
+    _print(run_experiment(run_id, model_id))
 
 
-@app.command(
+@_register(
     "run-generation",
-    help="Execute pending experiments for the run generation up to worker limits. Returns generation execution summary.",
+    "Execute pending experiments for the run generation up to worker limits. Returns generation execution summary.",
 )
 def generation_run_command(
     run_id: Annotated[str, typer.Option(...)],
     max_workers: Annotated[int, typer.Option()] = 0,
 ) -> None:
-    _print(generation_run(run_id, max_workers=(max_workers or None)))
+    _print(run_generation(run_id, max_workers=(max_workers or None)))
 
 
-@app.command(
-    "generate-model",
-    help="Register a model source file and lineage metadata for a run. Returns created model metadata.",
+@_register(
+    "write-generation-report",
+    "Write reports/generation_n.md for a run generation. Returns the report path.",
 )
-def generate_model_command(
+def generation_report_write_command(
+    run_id: Annotated[str, typer.Option(...)],
+    generation: Annotated[int, typer.Option(...)],
+    content: Annotated[str, typer.Option()] = "",
+) -> None:
+    _print(write_generation_report(run_id, generation, content))
+
+
+@_register(
+    "register-model",
+    "Validate a model source file, then register it with lineage metadata for a run.",
+)
+def register_model_command(
     run_id: Annotated[str, typer.Option(...)],
     name: Annotated[str, typer.Option(...)],
     model_path: Annotated[str, typer.Option(...)],
@@ -123,26 +155,27 @@ def generate_model_command(
     test_size_days: Annotated[int, typer.Option()] = 7,
     generation: Annotated[int | None, typer.Option()] = None,
     parent_id: Annotated[str, typer.Option()] = "",
+    refresh_data: Annotated[bool, typer.Option()] = False,
 ) -> None:
-    content = Path(model_path).read_text(encoding="utf-8")
     _print(
-        model_create(
-            run_id,
-            name,
-            content,
-            log,
-            reasoning,
+        register_model(
+            run_id=run_id,
+            name=name,
+            model_path=model_path,
+            log=log,
+            reasoning=reasoning,
             training_size_days=training_size_days,
             test_size_days=test_size_days,
             generation=generation,
-            parent_id=(parent_id or None),
+            parent_id=_empty_to_none(parent_id),
+            refresh_data=refresh_data,
         )
     )
 
 
-@app.command(
+@_register(
     "validate-model",
-    help="Validate a model by running it as an experiment in shared sandbox run (AAPL, Feb 2026). Returns status and metrics.",
+    "Validate a model by running it as an experiment in shared sandbox run (AAPL, Feb 2026). Returns status and metrics.",
 )
 def validate_model_command(
     model_path: Annotated[str, typer.Option(...)],
@@ -152,7 +185,7 @@ def validate_model_command(
     refresh_data: Annotated[bool, typer.Option()] = False,
 ) -> None:
     _print(
-        model_validate(
+        validate_model(
             model_path=model_path,
             task=task,
             training_size_days=training_size_days,
@@ -162,36 +195,36 @@ def validate_model_command(
     )
 
 
-@app.command(
+@_register(
     "list-models",
-    help="List all registered models for a run. Returns model metadata array.",
+    "List all registered models for a run. Returns model metadata array.",
 )
 def model_list_command(run_id: Annotated[str, typer.Option(...)]) -> None:
-    _print(model_list(run_id))
+    _print(list_models(run_id))
 
 
-@app.command(
+@_register(
     "get-model",
-    help="Read one model's metadata and source by model id. Returns full model payload.",
+    "Read one model's metadata and source by model id. Returns full model payload.",
 )
 def get_model_command(
     run_id: Annotated[str, typer.Option(...)],
     model_id: Annotated[str, typer.Option(...)],
 ) -> None:
-    _print(model_read(run_id, model_id))
+    _print(get_model(run_id, model_id))
 
 
-@app.command(
+@_register(
     "get-learning-tree",
-    help="Build lineage and performance view for model selection decisions. Returns learning tree payload.",
+    "Build lineage and performance view for model selection decisions. Returns learning tree payload.",
 )
 def get_learning_tree_command(run_id: Annotated[str, typer.Option(...)]) -> None:
     _print(get_learning_tree(run_id))
 
 
-@app.command(
+@_register(
     "read-predictions",
-    help="Read run predictions with optional model and date filters. Returns prediction rows.",
+    "Read run predictions with optional model and date filters. Returns prediction rows.",
 )
 def predictions_read_command(
     run_id: Annotated[str, typer.Option(...)],
@@ -199,50 +232,50 @@ def predictions_read_command(
     date_from: Annotated[str, typer.Option()] = "",
     date_to: Annotated[str, typer.Option()] = "",
 ) -> None:
-    _print(predictions_read(run_id, model_id=(model_id or None), date_from=(date_from or None), date_to=(date_to or None)))
+    _print(read_predictions(run_id, model_id=_empty_to_none(model_id), date_from=_empty_to_none(date_from), date_to=_empty_to_none(date_to)))
 
 
-@app.command(
+@_register(
     "visualize-learning",
-    help="Generate run charts and optionally write files to an output directory. Returns chart artifact info.",
+    "Generate run charts and optionally write files to an output directory. Returns chart artifact info.",
 )
 def visualize_learning_command(
     run_id: Annotated[str, typer.Option(...)],
     output: Annotated[str, typer.Option()] = "",
 ) -> None:
-    _print(visualize(run_id, output=(output or None)))
+    _print(visualize_learning(run_id, output=_empty_to_none(output)))
 
 
-@app.command(
+@_register(
     "get-run-metadata",
-    help="Read saved run metadata. Returns run metadata.",
+    "Read saved run metadata. Returns run metadata.",
 )
 def run_metadata_get_command(run_id: Annotated[str, typer.Option(...)]) -> None:
-    _print(run_metadata_get(run_id))
+    _print(get_run_metadata(run_id))
 
 
-@app.command(
+@_register(
     "get-generation-summary",
-    help="Read current generation progress and pending/completed counts. Returns generation status.",
+    "Read current generation progress and pending/completed counts. Returns generation status.",
 )
 def generation_state_command(run_id: Annotated[str, typer.Option(...)]) -> None:
-    _print(get_generation_state(run_id))
+    _print(get_generation_summary(run_id))
 
 
-@app.command(
+@_register(
     "get-run-status",
-    help="Read run metadata and current generation state in one call. Returns merged metadata and generation payload.",
+    "Read run metadata and current generation state in one call. Returns merged metadata and generation payload.",
 )
 def run_status_command(run_id: Annotated[str, typer.Option(...)]) -> None:
-    _print(run_status(run_id))
+    _print(get_run_status(run_id))
 
 
-@app.command(
+@_register(
     "get-runs-summary",
-    help="Summarize all discovered runs and their top-level performance. Returns run summary list.",
+    "Summarize all discovered runs and their top-level performance. Returns run summary list.",
 )
 def runs_summary_command() -> None:
-    _print(runs_summary())
+    _print(get_runs_summary())
 
 
 def main() -> None:

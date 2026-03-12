@@ -12,62 +12,9 @@ Autoquant can run research loops/runs to find the best predictive model over a g
 
 Update your files and yourself to become, an autonomous quant financial markets researcher 
 
-## Install/setup
+## Install
 
-Setup goals:
-
-- Run your bootstrap.md based on these README instructions.
-- Clone the repo.
-- Install AutoQuant as a package.
-- Setup environment vars safely
-
-
-1. Create the workspace, clone the repo, and enter the project directory:
-   ```bash
-   export AUTOQUANT_WORKSPACE="${AUTOQUANT_WORKSPACE:-$HOME/Documents/autoquant}"
-   mkdir -p "$AUTOQUANT_WORKSPACE"
-   git clone https://github.com/dev0xx1/autoquant.git "$AUTOQUANT_WORKSPACE/autoquant"
-   cd "$AUTOQUANT_WORKSPACE/autoquant"
-   ```
-
-2. Create a virtual environment:
-   ```bash
-   mkdir -p "$AUTOQUANT_WORKSPACE/venv"
-   python3 -m venv "$AUTOQUANT_WORKSPACE/venv/autoquant"
-   ```
-
-3. Install the package from Git:
-   ```bash
-   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install "git+https://github.com/dev0xx1/autoquant.git@main#subdirectory=autoquant"
-   ```
-
-4. Optional local development install from your clone:
-   ```bash
-   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install -e .
-   ```
-
-5. Set environment variables:
-   - Required keys listed in `autoquant/.env.example` must be added to openclaw.json
-   - Ask API keys from user or let him update the env vars directly
-
-6. Verify installation:
-   ```bash
-   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/autoquant" --help
-   ```
-
-7. Optional legacy launcher script:
-   ```bash
-   cat > autoquant <<'EOF'
-   #!/usr/bin/env bash
-   set -euo pipefail
-   BASE_DIR="${AUTOQUANT_WORKSPACE:-$HOME/Documents/autoquant}"
-   if [[ ! -x "$BASE_DIR/venv/autoquant/bin/python" || ! -f "$BASE_DIR/autoquant/autoquant.py" ]]; then
-     BASE_DIR="$(pwd)/autoquant"
-   fi
-   "$BASE_DIR/venv/autoquant/bin/python" "$BASE_DIR/autoquant/autoquant.py" "$@"
-   EOF
-   chmod +x autoquant
-   ```
+Install instructions are in `INSTALL.md`.
 
 ## Updates
 
@@ -88,13 +35,48 @@ Use this research loop to iterate over models and maximize your objective functi
 
 Repeat until stop condition for a given `run_id`:
 
-1. Check current generation progress and pending work.
-2. If experiments are pending, run them.
-3. Review the learning tree and recent outcomes to choose next generation direction.
-4. Create and validate candidate models, then register validated models with explicit lineage and generation.
-5. Execute the new generation of experiments.
-6. Stop if completed experiments reached run limit, or learning has stagnated across multiple generations.
-7. Repeat from step 1.
+1. Check run and generation state.
+   ```bash
+   autoquant get-run-status --run-id <run_id>
+   autoquant get-generation-summary --run-id <run_id>
+   autoquant get-runs-summary
+   ```
+   Use `get-runs-summary` to track `n_experiments` and `pending_experiments` for all runs.
+2. If work is pending, execute it.
+   ```bash
+   autoquant run-generation --run-id <run_id>
+   ```
+   Optional single experiment execution:
+   ```bash
+   autoquant run-experiment --run-id <run_id> --model-id <model_id>
+   ```
+3. Review outcomes and lineage before deciding next model direction.
+   ```bash
+   autoquant experiments-list --run-id <run_id>
+   autoquant get-learning-tree --run-id <run_id>
+   autoquant list-models --run-id <run_id>
+   ```
+4. Write the candidate model to workspace temp and validate it.
+   Candidate model path: `$AUTOQUANT_WORKSPACE/tmp/<run_id>/models/<candidate_model>.py`
+   ```bash
+   mkdir -p "$AUTOQUANT_WORKSPACE/tmp/<run_id>/models"
+   autoquant validate-model --model-path "$AUTOQUANT_WORKSPACE/tmp/<run_id>/models/<candidate_model>.py" --task classification --training-size-days 30 --test-size-days 7
+   ```
+5. Register the candidate model. Registration validates first, then persists the model only on successful validation.
+   ```bash
+   autoquant register-model --run-id <run_id> --name "<model_name>" --model-path "$AUTOQUANT_WORKSPACE/tmp/<run_id>/models/<candidate_model>.py" --log "<what_changed>" --reasoning "<why_this_model>" --generation <generation_n> --parent-id <parent_model_id>
+   ```
+6. Execute the new generation workload.
+   ```bash
+   autoquant run-generation --run-id <run_id>
+   ```
+7. Write the generation report after the new generation registration/run is completed.
+   Draft report path: `$AUTOQUANT_WORKSPACE/tmp/<run_id>/reports/generation_<generation_n>.md`
+   ```bash
+   mkdir -p "$AUTOQUANT_WORKSPACE/tmp/<run_id>/reports"
+   autoquant write-generation-report --run-id <run_id> --generation <generation_n> --content "<report_text>"
+   ```
+8. Stop when completed experiments reach run limit or learning stagnates across generations, otherwise repeat from step 1.
 
 ## Training Dataset
 
@@ -220,40 +202,35 @@ Use `core/seed_train.py` as the baseline template.
 - You must let the user know about any issues related to python virtual environments and any critical problem in our framework.
 
 
-## Run Layout
+## Run data
 
-Each run creates `$AUTOQUANT_WORKSPACE/runs/<run_id>/`:
-
-- `metadata.json` (flat run metadata, including `autoquant_commit_hash`, `task`, `objective_function`, `max_experiments`, `max_concurrent_models`, `train_time_limit_minutes`, `current_generation`)
-- `data/prices.csv` with `timestamp,ticker,open,high,low,close,volume`
-- `data/models.csv`
-- `data/predictions.csv`
-- `data/experiments.csv`
-- `data/lineage_graph.json`
-- `data/data_report.txt`
-- `models/{sanitized_name}_{model_id}.py` or `models/{model_id}.py` if the sanitized name is empty
-- `charts/*.png`
+Use the CLI to conduct research. Never write 
 
 
-## Rules
+## Important Rules
 
+You must at all costs:
+- Save critical information about how to operate and avoid repetitive issues in your system prompts and memory to survive
+- Follow your research loop methodology
+- Use the CLI to run your research loop
 - Never write to Documents/autoquant directly. Use commands only. You only have READ access to your workspace outside of autoquant CLI.
-- Only use your learning tree as input to create the next generation.
+
 
 ## OpenClaw Knowledge Placement
 
 Keep OpenClaw knowledge split by responsibility so the system prompt stays clear and compact.
 
 - `AGENTS.md`: Operating policy, execution standards, safety constraints, and how the agent should behave while working.
-- `TOOLS.md`: Command-line workflows, tool usage rules, and shell command conventions.
+- `TOOLS.md`: Command-line workflows and --help command, tool usage rules, and shell command conventions.
 - `IDENTITY.md`: Persona, role, repo url (https://github.com/dev0xx1/autoquant/tree/main), tone, and durable identity traits of the agent.
 - `USER.md`: Stable user preferences and working style expectations.
 - `SOUL.md`: High-level mission and values that guide long-term decision style.
 
 Do not move operational guidance into `HEARTBEAT.md`, `BOOTSTRAP.md`, or `MEMORY.md`.
 
-- `HEARTBEAT.md` is for heartbeat/ack behavior only.
+- `HEARTBEAT.md` is for heartbeat/ack behavior only. 
 - `BOOTSTRAP.md` is for first-run workspace bootstrapping context only.
 - `MEMORY.md` is for memory recall context, not core operating instructions.
 
 Practical rule: if it is command-line or tooling behavior, place it in `TOOLS.md`.
+

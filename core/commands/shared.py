@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -12,11 +11,12 @@ from core.constants import (
     MODELS_DIR,
     PREDICTIONS_CSV,
     PRICES_CSV,
+    REPORTS_DIR,
     RUN_DATA_DIR,
     RUN_META_JSON,
-    RUN_META_JSON_LEGACY,
 )
 from core.utils.io_util import ensure_csv_header, read_json, write_json
+from core.utils.metrics_util import extract_validation_metrics, objective_value
 from core.paths import run_dir
 from core.schemas import RunMeta
 from core.utils.storage import parse_experiment_rows, read_csv
@@ -35,21 +35,7 @@ def safe_model_text(source: str) -> str:
 def ensure_run_layout(target_run_dir: Path) -> None:
     (target_run_dir / RUN_DATA_DIR).mkdir(parents=True, exist_ok=True)
     (target_run_dir / MODELS_DIR).mkdir(parents=True, exist_ok=True)
-    legacy_meta_path = target_run_dir / RUN_META_JSON_LEGACY
-    target_meta_path = target_run_dir / RUN_META_JSON
-    if legacy_meta_path.exists() and not target_meta_path.exists():
-        shutil.move(str(legacy_meta_path), str(target_meta_path))
-    legacy_files = {
-        "models.csv": MODELS_CSV,
-        "experiments.csv": EXPERIMENTS_CSV,
-        "predictions.csv": PREDICTIONS_CSV,
-    }
-    for legacy_name, target_name in legacy_files.items():
-        legacy_path = target_run_dir / legacy_name
-        target_path = target_run_dir / target_name
-        if legacy_path.exists() and not target_path.exists():
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(legacy_path), str(target_path))
+    (target_run_dir / REPORTS_DIR).mkdir(parents=True, exist_ok=True)
     ensure_csv_header(target_run_dir / MODELS_CSV, MODEL_FIELDNAMES)
     ensure_csv_header(target_run_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES)
     ensure_csv_header(
@@ -62,11 +48,7 @@ def ensure_run_layout(target_run_dir: Path) -> None:
 def read_run_meta(run_id: str) -> RunMeta:
     path = run_dir(run_id) / RUN_META_JSON
     if not path.exists():
-        legacy_path = run_dir(run_id) / RUN_META_JSON_LEGACY
-        if legacy_path.exists():
-            path = legacy_path
-        else:
-            raise RuntimeError(f"Missing run metadata: {path}")
+        raise RuntimeError(f"Missing run metadata: {path}")
     return RunMeta.model_validate(read_json(path))
 
 
@@ -74,43 +56,28 @@ def write_run_meta(meta: RunMeta) -> None:
     write_json(run_dir(meta.run_id) / RUN_META_JSON, meta.model_dump(mode="json"))
 
 
-def _objective_from_validation_metrics(task: str, objective_function: str, metrics: dict[str, object]) -> float:
-    if task == "classification":
-        if objective_function == "accuracy":
-            return float(metrics["accuracy"])
-        if objective_function == "f1":
-            return float(metrics["f1"])
-        if objective_function == "macro_f1":
-            return float(metrics["macro_f1"])
-        return float(metrics["weighted_f1"])
-    return float(metrics["r2"])
-
-
-def _extract_metrics(metrics: object) -> dict[str, object] | None:
-    if not isinstance(metrics, dict):
-        return None
-    validation = metrics.get("validation")
-    if isinstance(validation, dict):
-        return validation
-    return metrics
+def generation_report_path(run_id: str, generation: int) -> Path:
+    return run_dir(run_id) / REPORTS_DIR / f"generation_{generation}.md"
 
 
 def run_summary_for(run_id: str) -> dict[str, str]:
     rows = parse_experiment_rows(read_csv(run_dir(run_id) / EXPERIMENTS_CSV))
     meta = read_run_meta(run_id)
     n_exp = str(len(rows))
+    pending_exp = str(sum(1 for row in rows if row.status == "pending"))
     completed = [row for row in rows if row.status == "completed" and row.metrics is not None]
     objectives: list[float] = []
     for row in completed:
-        validation_metrics = _extract_metrics(row.metrics)
+        validation_metrics = extract_validation_metrics(row.metrics)
         if isinstance(validation_metrics, dict):
-            objectives.append(_objective_from_validation_metrics(row.task, meta.objective_function, validation_metrics))
+            objectives.append(objective_value(row.task, meta.objective_function, validation_metrics))
     best_objective = max(objectives) if objectives else None
     ts = max(((row.finished_at_utc or row.started_at_utc or "") for row in rows), default="")
     return {
         "last_finished_at_utc": ts or "-",
         "best_objective": f"{best_objective:.4f}" if best_objective is not None else "-",
         "n_experiments": n_exp,
+        "pending_experiments": pending_exp,
         "objective_function": meta.objective_function,
         "task": meta.task,
     }

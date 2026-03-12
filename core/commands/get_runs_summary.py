@@ -13,7 +13,7 @@ def _is_run_dir(path: Path) -> bool:
     return path.is_dir() and (path / RUN_META_JSON).exists()
 
 
-def runs_summary() -> dict[str, Any]:
+def get_runs_summary() -> dict[str, Any]:
     root_dir = runs_root()
     run_ids = sorted([path.name for path in root_dir.iterdir() if _is_run_dir(path)]) if root_dir.exists() else []
     if not run_ids:
@@ -29,6 +29,7 @@ def runs_summary() -> dict[str, Any]:
                 "objective_function": summary["objective_function"],
                 "task": summary["task"],
                 "n_experiments": summary["n_experiments"],
+                "pending_experiments": summary["pending_experiments"],
             }
         )
     return {"runs": summaries}

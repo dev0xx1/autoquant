@@ -1,35 +1,40 @@
 from core.commands.prepare_data import prepare_data
-from core.commands.experiment_run import experiment_run
+from core.commands.run_experiment import run_experiment
 from core.commands.experiments_list import experiments_list
-from core.commands.generation_run import generation_run
-from core.commands.generation_state import get_generation_state
-from core.commands.model_create import model_create
-from core.commands.model_list import model_list
-from core.commands.model_read import model_read
-from core.commands.model_validate import model_validate
+from core.commands.run_generation import run_generation
+from core.commands.write_generation_report import write_generation_report
+from core.commands.get_generation_summary import get_generation_summary
+from core.commands.register_model import create_model, register_model
+from core.commands.list_models import list_models
+from core.commands.get_model import get_model
+from core.commands.validate_model import validate_model
 from core.commands.get_learning_tree import get_learning_tree
-from core.commands.predictions_read import predictions_read
-from core.commands.run_metadata_get import run_metadata_get
-from core.commands.run_init import run_init
-from core.commands.run_status import run_status
-from core.commands.runs_summary import runs_summary
-from core.commands.visualize import visualize
+from core.commands.read_predictions import read_predictions
+from core.commands.get_run_metadata import get_run_metadata
+from core.commands.init_run import init_run
+from core.commands.get_run_status import get_run_status
+from core.commands.get_runs_summary import get_runs_summary
+from core.commands.visualize_learning import visualize_learning
+from core.commands.status import status
 
 __all__ = [
     "prepare_data",
-    "experiment_run",
+    "run_experiment",
     "experiments_list",
-    "generation_run",
-    "get_generation_state",
-    "model_create",
-    "model_list",
-    "model_read",
-    "model_validate",
+    "run_generation",
+    "write_generation_report",
+    "get_generation_summary",
+    "create_model",
+    "register_model",
+    "list_models",
+    "get_model",
+    "validate_model",
     "get_learning_tree",
-    "predictions_read",
-    "run_metadata_get",
-    "run_init",
-    "run_status",
-    "runs_summary",
-    "visualize",
+    "read_predictions",
+    "get_run_metadata",
+    "init_run",
+    "get_run_status",
+    "get_runs_summary",
+    "visualize_learning",
+    "status",
 ]

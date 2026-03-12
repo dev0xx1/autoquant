@@ -5,8 +5,11 @@ PRICES_CSV = "data/prices.csv"
 DATA_REPORT_TXT = "data/data_report.txt"
 RUN_DATA_DIR = "data"
 MODELS_DIR = "models"
+REPORTS_DIR = "reports"
+TMP_DIR = "tmp"
+TMP_MODELS_DIR = "models"
+TMP_REPORTS_DIR = "reports"
 RUN_META_JSON = "metadata.json"
-RUN_META_JSON_LEGACY = "meta.json"
 MODEL_FIELDNAMES = [
     "name",
     "model_id",

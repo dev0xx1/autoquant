@@ -7,7 +7,7 @@ from core.paths import run_dir
 from core.utils.storage import parse_prediction_rows, read_csv
 
 
-def predictions_read(run_id: str, model_id: str | None = None, date_from: str | None = None, date_to: str | None = None) -> list[dict[str, Any]]:
+def read_predictions(run_id: str, model_id: str | None = None, date_from: str | None = None, date_to: str | None = None) -> list[dict[str, Any]]:
     rows = parse_prediction_rows(read_csv(run_dir(run_id) / PREDICTIONS_CSV))
     if model_id:
         rows = [row for row in rows if row.model_id == model_id]

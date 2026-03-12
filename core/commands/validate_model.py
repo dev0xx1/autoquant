@@ -8,10 +8,10 @@ from core.paths import run_dir
 from core.utils.io_util import read_csv
 from core.utils.storage import get_model_rows
 
-from .experiment_run import experiment_run
-from .model_create import model_create
+from .run_experiment import run_experiment
+from .register_model import create_model
 from .prepare_data import prepare_data
-from .run_init import run_init
+from .init_run import init_run
 from .shared import read_run_meta
 
 SANDBOX_RUN_ID = "sandbox"
@@ -32,21 +32,15 @@ def _validation_model_name(path: Path) -> str:
     return name[:20]
 
 
-def model_validate(
-    model_path: str,
+def _resolve_validation_model(
+    source_path: Path,
     task: str,
-    training_size_days: int = 30,
-    test_size_days: int = 7,
-    refresh_data: bool = False,
-) -> dict[str, Any]:
-    source_path = Path(model_path)
-    if not source_path.exists():
-        raise RuntimeError(f"Model file not found: {source_path}")
-    source = source_path.read_text(encoding="utf-8")
+    training_size_days: int,
+    test_size_days: int,
+) -> tuple[str, Path, bool]:
     sandbox_dir = run_dir(SANDBOX_RUN_ID)
-    initialized = False
     if not (sandbox_dir / RUN_META_JSON).exists():
-        init_payload = run_init(
+        init_payload = init_run(
             run_id=SANDBOX_RUN_ID,
             ticker=SANDBOX_TICKER,
             from_date=SANDBOX_FROM_DATE,
@@ -56,34 +50,51 @@ def model_validate(
             seed_training_size_days=training_size_days,
             seed_test_size_days=test_size_days,
         )
-        model_id = str(init_payload["seed_model_id"])
-        initialized = True
-    else:
-        meta = read_run_meta(SANDBOX_RUN_ID)
-        if meta.task != task:
-            raise RuntimeError(f"Sandbox task mismatch: existing={meta.task} requested={task}")
-        models = get_model_rows(sandbox_dir, MODELS_CSV)
-        parent_id = _latest_model_id(models)
-        generation = max((row.generation for row in models), default=0) + 1
-        created = model_create(
-            run_id=SANDBOX_RUN_ID,
-            name=_validation_model_name(source_path),
-            content=source,
-            log="sandbox validation",
-            reasoning="validate-model",
-            training_size_days=training_size_days,
-            test_size_days=test_size_days,
-            generation=generation,
-            parent_id=parent_id,
-        )
-        model_id = str(created["model_id"])
+        return str(init_payload["seed_model_id"]), sandbox_dir, True
+    meta = read_run_meta(SANDBOX_RUN_ID)
+    if meta.task != task:
+        raise RuntimeError(f"Sandbox task mismatch: existing={meta.task} requested={task}")
+    source = source_path.read_text(encoding="utf-8")
+    models = get_model_rows(sandbox_dir, MODELS_CSV)
+    parent_id = _latest_model_id(models)
+    generation = max((row.generation for row in models), default=0) + 1
+    created = create_model(
+        run_id=SANDBOX_RUN_ID,
+        name=_validation_model_name(source_path),
+        content=source,
+        log="sandbox validation",
+        reasoning="validate-model",
+        training_size_days=training_size_days,
+        test_size_days=test_size_days,
+        generation=generation,
+        parent_id=parent_id,
+    )
+    return str(created["model_id"]), sandbox_dir, False
+
+
+def validate_model(
+    model_path: str,
+    task: str,
+    training_size_days: int = 30,
+    test_size_days: int = 7,
+    refresh_data: bool = False,
+) -> dict[str, Any]:
+    source_path = Path(model_path)
+    if not source_path.exists():
+        raise RuntimeError(f"Model file not found: {source_path}")
+    model_id, sandbox_dir, initialized = _resolve_validation_model(
+        source_path,
+        task,
+        training_size_days,
+        test_size_days,
+    )
     prices_rows = read_csv(sandbox_dir / PRICES_CSV)
     if refresh_data or not prices_rows:
         prepare_data(SANDBOX_RUN_ID)
         data_source = "downloaded"
     else:
         data_source = "reused"
-    result = experiment_run(SANDBOX_RUN_ID, model_id)
+    result = run_experiment(SANDBOX_RUN_ID, model_id)
     return {
         "validation_run_id": SANDBOX_RUN_ID,
         "validation_run_dir": str(sandbox_dir),

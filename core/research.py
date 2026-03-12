@@ -16,6 +16,7 @@ from core.constants import (
 )
 from core.graph import update_model_objective
 from core.utils.io_util import read_csv, read_json
+from core.utils.metrics_util import extract_validation_metrics, objective_value
 from core.utils.model_runtime import run_train_file
 from core.utils.storage import (
     get_model_map,
@@ -25,27 +26,6 @@ from core.utils.storage import (
     upsert_csv,
 )
 from core.utils.time_utils import now_utc
-
-
-def get_objective_value(metrics: dict[str, object], objective_function: str, task: str) -> float:
-    if task == "classification":
-        if objective_function == "accuracy":
-            return float(metrics["accuracy"])
-        if objective_function == "f1":
-            return float(metrics["f1"])
-        if objective_function == "macro_f1":
-            return float(metrics["macro_f1"])
-        return float(metrics["weighted_f1"])
-    return float(metrics["r2"])
-
-
-def _as_validation_metrics(metrics: object) -> dict[str, object] | None:
-    if not isinstance(metrics, dict):
-        return None
-    validation = metrics.get("validation")
-    if isinstance(validation, dict):
-        return validation
-    return metrics
 
 
 def run_experiment(base_dir: Path, run_meta: RunMeta, exp: ExperimentRow) -> None:
@@ -85,12 +65,12 @@ def run_experiment(base_dir: Path, run_meta: RunMeta, exp: ExperimentRow) -> Non
         exp.error = None
         exp.finished_at_utc = now_utc()
         upsert_csv(base_dir / EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, ["ticker", "from_date", "to_date", "model_id"], to_dict_rows([exp]))
-        objective_value = get_objective_value(validation_metrics, run_meta.objective_function, run_meta.task)
+        objective = objective_value(run_meta.task, run_meta.objective_function, validation_metrics)
         update_model_objective(
             base_dir,
             exp.model_id,
             run_meta.objective_function,
-            objective_value,
+            objective,
             {"task": run_meta.task, "metrics": {"validation": validation_metrics}},
         )
         summary_metric = "macro_f1" if run_meta.task == "classification" else "r2"
@@ -101,7 +81,7 @@ def run_experiment(base_dir: Path, run_meta: RunMeta, exp: ExperimentRow) -> Non
             train_metrics.get("n_samples"),
             validation_metrics.get("n_samples"),
             run_meta.objective_function,
-            objective_value,
+            objective,
             run_meta.task,
             summary_metric,
             summary_value,
@@ -172,7 +152,7 @@ def generate_learning_chart(run_dir: Path, output_path: Path | None = None) -> P
         for e in exp_rows
         if e.status == "completed"
         and e.metrics is not None
-        and _as_validation_metrics(e.metrics) is not None
+        and extract_validation_metrics(e.metrics) is not None
     ]
     completed.sort(key=lambda e: e.finished_at_utc or e.started_at_utc or "")
     if not completed:
@@ -187,9 +167,9 @@ def generate_learning_chart(run_dir: Path, output_path: Path | None = None) -> P
         return output_path
 
     validation_objective = [
-        get_objective_value(validation_metrics, run_meta.objective_function, e.task)
+        objective_value(e.task, run_meta.objective_function, validation_metrics)
         for e in completed
-        if (validation_metrics := _as_validation_metrics(e.metrics)) is not None
+        if (validation_metrics := extract_validation_metrics(e.metrics)) is not None
     ]
     validation_loss = [1.0 - value for value in validation_objective]
     running_best = []

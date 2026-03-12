@@ -4,20 +4,12 @@ from enum import Enum
 import json
 from pathlib import Path
 
-from core.utils.io_util import read_csv, upsert_csv, write_csv
+from core.utils.io_util import read_csv, upsert_csv
+from core.utils.metrics_util import extract_validation_metrics
 from core.schemas import ExperimentRow, ModelRow, PredictionRow
 
 def _clean_optional(value: str) -> str | None:
     return None if value == "" else value
-
-
-def _extract_task_metrics(metrics: object) -> dict[str, object] | None:
-    if not isinstance(metrics, dict):
-        return None
-    validation = metrics.get("validation")
-    if isinstance(validation, dict):
-        return validation
-    return metrics
 
 
 def parse_model_rows(rows: list[dict[str, str]]) -> list[ModelRow]:
@@ -27,8 +19,7 @@ def parse_model_rows(rows: list[dict[str, str]]) -> list[ModelRow]:
         payload["name"] = payload.get("name") or payload.get("model_id", "")
         payload["generation"] = int(payload.get("generation") or 0)
         payload["task"] = payload.get("task") or "classification"
-        if "model_path" not in payload:
-            payload["model_path"] = payload.get("prompt_path", "")
+        payload["model_path"] = payload.get("model_path", "")
         payload["training_size_days"] = int(payload.get("training_size_days") or 30)
         payload["test_size_days"] = int(payload.get("test_size_days") or 7)
         payload["parent_id"] = _clean_optional(payload.get("parent_id", ""))
@@ -41,49 +32,10 @@ def parse_experiment_rows(rows: list[dict[str, str]]) -> list[ExperimentRow]:
     parsed: list[ExperimentRow] = []
     for row in rows:
         payload = dict(row)
-        payload["generation"] = int(payload.get("generation") or payload.get("iteration") or 0)
+        payload["generation"] = int(payload.get("generation") or 0)
         payload["task"] = payload.get("task") or "classification"
         metrics_raw = payload.get("metrics", "")
-        metrics: dict[str, object] | None = None
-        if metrics_raw:
-            metrics = _extract_task_metrics(json.loads(metrics_raw))
-        else:
-            validation_legacy_keys = [
-                "validation_n_samples",
-                "validation_accuracy",
-                "validation_precision",
-                "validation_recall",
-                "validation_f1",
-                "validation_weighted_f1",
-                "validation_macro_f1",
-                "validation_y_dist",
-            ]
-            test_legacy_keys = [
-                "test_n_samples",
-                "test_accuracy",
-                "test_precision",
-                "test_recall",
-                "test_f1",
-                "test_weighted_f1",
-                "test_macro_f1",
-                "test_y_dist",
-            ]
-            validation_metrics: dict[str, object] = {}
-            test_metrics: dict[str, object] = {}
-            for key in validation_legacy_keys:
-                value = _clean_optional(payload.get(key, ""))
-                if value is not None:
-                    metric_key = key.removeprefix("validation_")
-                    validation_metrics[metric_key] = float(value) if metric_key != "n_samples" else int(value)
-            for key in test_legacy_keys:
-                value = _clean_optional(payload.get(key, ""))
-                if value is not None:
-                    metric_key = key.removeprefix("test_")
-                    test_metrics[metric_key] = float(value) if metric_key != "n_samples" else int(value)
-            if validation_metrics:
-                metrics = validation_metrics
-            elif test_metrics:
-                metrics = test_metrics
+        metrics = extract_validation_metrics(json.loads(metrics_raw)) if metrics_raw else None
         payload["metrics"] = metrics
         for key in ["started_at_utc", "finished_at_utc", "error"]:
             payload[key] = _clean_optional(payload.get(key, ""))
@@ -121,7 +73,7 @@ def _serialize(value: object) -> str:
 def to_dict_rows(items: list[object]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for item in items:
-        payload = item.model_dump()  # type: ignore[attr-defined]
+        payload = getattr(item, "model_dump")()
         rows.append({k: _serialize(v) for k, v in payload.items()})
     return rows
 

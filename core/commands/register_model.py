@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import re
 import uuid
+from pathlib import Path
 from typing import Any
 
 from core.constants import EXPERIMENTS_CSV, EXPERIMENT_FIELDNAMES, MODEL_FIELDNAMES, MODELS_CSV, MODELS_DIR
 from core.graph import upsert_model_node
 from core.utils.io_util import write_text
-from core.paths import run_dir
+from core.paths import run_dir, tmp_root
 from core.schemas import ExperimentRow, ModelRow
 from core.utils.storage import get_model_rows, to_dict_rows, upsert_csv
 from core.utils.time_utils import now_utc
@@ -19,7 +20,7 @@ def _safe_model_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._-")
 
 
-def model_create(
+def create_model(
     run_id: str,
     name: str,
     content: str,
@@ -94,3 +95,52 @@ def model_create(
         "test_size_days": test_size_days,
         "parent_id": parent_id,
     }
+
+
+def register_model(
+    run_id: str,
+    name: str,
+    model_path: str,
+    log: str,
+    reasoning: str,
+    training_size_days: int = 30,
+    test_size_days: int = 7,
+    generation: int | None = None,
+    parent_id: str | None = None,
+    refresh_data: bool = False,
+) -> dict[str, Any]:
+    tmp_root()
+    source_path = Path(model_path)
+    if not source_path.exists():
+        raise RuntimeError(f"Model file not found: {source_path}")
+    meta = read_run_meta(run_id)
+    from .validate_model import validate_model
+
+    validation = validate_model(
+        model_path=str(source_path),
+        task=meta.task,
+        training_size_days=training_size_days,
+        test_size_days=test_size_days,
+        refresh_data=refresh_data,
+    )
+    if validation.get("status") != "completed":
+        error = str(validation.get("error") or "validation failed")
+        raise RuntimeError(f"Model validation failed: {error}")
+    created = create_model(
+        run_id=run_id,
+        name=name,
+        content=source_path.read_text(encoding="utf-8"),
+        log=log,
+        reasoning=reasoning,
+        training_size_days=training_size_days,
+        test_size_days=test_size_days,
+        generation=generation,
+        parent_id=parent_id,
+    )
+    created["validation"] = {
+        "status": validation.get("status"),
+        "validation_run_id": validation.get("validation_run_id"),
+        "validation_model_id": validation.get("model_id"),
+        "metrics": validation.get("metrics"),
+    }
+    return created
