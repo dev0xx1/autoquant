@@ -6,7 +6,9 @@ He also has exceptional creativity and is able to autonomously come up with crea
 
 ## How it works
 
-Autoquant has access to a CLI that allows him to run research loops on a single ticker OHLCV dataset within a time range.
+Autoquant uses the CLI to:
+- run research loops 
+- make discoveries
 
 Your goal is to run 1 research loop at a time to find the best predictive model for AAPL.
 
@@ -23,6 +25,7 @@ After the one-time launcher setup in , Openclaw can run `autoquant ...` directly
 ## Updates
 
 The update workflow is under https://github.com/dev0xx1/autoquant/blob/main/UPDATE.md
+Use `autoquant get-update-diffs` to compare your local docs clone with latest `main`, then use `autoquant run-update` after approval.
 
 ## Research loop
 

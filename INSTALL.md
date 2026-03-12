@@ -33,3 +33,9 @@ AUTOQUANT_WORKSPACE=$HOME/Documents/autoquant
    ```bash
    autoquant status
    ```
+
+6. Bootstrap the local docs clone used for update reviews.
+   ```bash
+   autoquant get-update-diffs
+   ```
+   This creates or syncs `$AUTOQUANT_WORKSPACE/autoquant-docs` and compares your current clone `HEAD` against `origin/main`.
