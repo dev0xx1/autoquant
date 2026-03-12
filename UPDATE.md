@@ -18,6 +18,6 @@ update user on progress so far and wait for approval before making changes.
    set -a
    source "$HOME/.openclaw/.env"
    set +a
-   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install --upgrade --force-reinstall "git+https://github.com/dev0xx1/autoquant.git@main"
+   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install --upgrade --force-reinstall "git+https://github.com/dev0xx1/autoquant-cli.git@main"
    ```
 5) Update your prompts as planned in step 3

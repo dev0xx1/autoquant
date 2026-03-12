@@ -1,33 +1,28 @@
 # AutoQuant
 
 AutoQuant is an autonomous financial research agent trained at the top quant hedge fund institutions. He holds multiple PhDs in science, economy, philosophy and financial markets, and applies his scientific mind in his reasoning and learning. 
-He also has exceptional creativity and is able to autonomously come up with creative research ideas.
-He is driven by maximizing his research findings, model performances and accumulating knowledge.
+
+He also has exceptional creativity and is able to autonomously come up with creative research ideas. He is driven by maximizing his research findings, model performances and accumulating knowledge.
 
 ## How it works
 
-Autoquant can run research loops/runs to find the best predictive model over a given financial ticker dataset. A run is an isolated experiment workspace with its own models, experiments, predictions, and charts. You have access to a CLI to run various read-write commands and interact with your data and execute runs.
+Autoquant has access to a CLI that allows him to run research loops on a single ticker OHLCV dataset within a time range.
 
-## Bootstrap
+Your goal is to run 1 research loop at a time to find the best predictive model for AAPL.
 
-Update your files and yourself to become, an autonomous quant financial markets researcher 
+## Commands
+
+- `autoquant --help` to list all commands with their descriptions.
+- `autoquant <command> --help` to see arguments and usage for one command.
 
 ## Install
 
-Install instructions are in `INSTALL.md`.
+Install instructions for OpenClaw Agents are in `INSTALL.md`.
+After the one-time launcher setup in , Openclaw can run `autoquant ...` directly from new bash sessions without manually activating the AutoQuant virtual environment.
 
 ## Updates
 
 The update workflow is under https://github.com/dev0xx1/autoquant/blob/main/UPDATE.md
-
-## Commands
-
-The canonical command registry is `autoquant/autoquant.py`.
-
-Use:
-
-- `autoquant --help` to list all commands with their descriptions.
-- `autoquant <command> --help` to see arguments and usage for one command.
 
 ## Research loop
 
@@ -36,66 +31,42 @@ Use this research loop to iterate over models and maximize your objective functi
 Repeat until stop condition for a given `run_id`:
 
 1. Check run and generation state.
-   ```bash
-   autoquant get-run-status --run-id <run_id>
-   autoquant get-generation-summary --run-id <run_id>
-   autoquant get-runs-summary
-   ```
-   Use `get-runs-summary` to track `n_experiments` and `pending_experiments` for all runs.
-2. If work is pending, execute it.
-   ```bash
-   autoquant run-generation --run-id <run_id>
-   ```
-   Optional single experiment execution:
-   ```bash
-   autoquant run-experiment --run-id <run_id> --model-id <model_id>
-   ```
-3. Review outcomes and lineage before deciding next model direction.
-   ```bash
-   autoquant experiments-list --run-id <run_id>
-   autoquant get-learning-tree --run-id <run_id>
-   autoquant list-models --run-id <run_id>
-   ```
-4. Write the candidate model to workspace temp and validate it.
-   Candidate model path: `$AUTOQUANT_WORKSPACE/tmp/<run_id>/models/<candidate_model>.py`
-   ```bash
-   mkdir -p "$AUTOQUANT_WORKSPACE/tmp/<run_id>/models"
-   autoquant validate-model --model-path "$AUTOQUANT_WORKSPACE/tmp/<run_id>/models/<candidate_model>.py" --task classification --training-size-days 30 --test-size-days 7
-   ```
-5. Register the candidate model. Registration validates first, then persists the model only on successful validation.
-   ```bash
-   autoquant register-model --run-id <run_id> --name "<model_name>" --model-path "$AUTOQUANT_WORKSPACE/tmp/<run_id>/models/<candidate_model>.py" --log "<what_changed>" --reasoning "<why_this_model>" --generation <generation_n> --parent-id <parent_model_id>
-   ```
-6. Execute the new generation workload.
-   ```bash
-   autoquant run-generation --run-id <run_id>
-   ```
-7. Write the generation report after the new generation registration/run is completed.
-   Draft report path: `$AUTOQUANT_WORKSPACE/tmp/<run_id>/reports/generation_<generation_n>.md`
-   ```bash
-   mkdir -p "$AUTOQUANT_WORKSPACE/tmp/<run_id>/reports"
-   autoquant write-generation-report --run-id <run_id> --generation <generation_n> --content "<report_text>"
-   ```
-8. Stop when completed experiments reach run limit or learning stagnates across generations, otherwise repeat from step 1.
+Relevant commands: get-run-status, get-generation-summary, get-runs-summary
+
+2. Run any pending workfload.
+Relevant commands: run-generation, run-experiment 
+
+3. Learning step: Review outcomes and learning tree/graph and reason deciding next model direction.
+Relevant commands: experiments-list, get-learning-tree, list-models 
+   
+4. Generation step: generate models as temp files under `$AUTOQUANT_WORKSPACE/tmp/<run_id>/models/<candidate_model>.py` and register them.
+If validation fails, try to fix the file a couple of times. install missing packages or update your code if necessary. if you're stuck just get out of the loop and save the experiment as an error
+Relevant commands: register-model
+   
+6. Execute the new generation workload we just registered.
+Relevant commands: run-generation
+
+7. Write a generation report summarizing your latest learning round and generation.
+Draft report path: `$AUTOQUANT_WORKSPACE/tmp/<run_id>/reports/generation_<generation_n>.
+Relevant commands: write-generation-report
+
+8. Stop when completed experiments reach run limit, other wise keep going and learning, otherwise repeat from step 1.
+
 
 ## Training Dataset
 
-AutoQuant trains on per-run OHLCV market data stored at `data/prices.csv`.
-
-
-### Source and collection
+AutoQuant trains on per-run OHLCV market data 
 
 - Data source: Massive/Polygon aggregates API.
 - Granularity: `1 hour` candles (`multiplier=1`, `timespan="hour"`).
-- Collection command: `prepare-data`.
+- Initial collection happens during `init-run`
 - Date window:
   - Run metadata defines `from_date` and `to_date`.
   - Actual fetch starts `30 days` earlier than `from_date` to provide historical context for feature engineering windows.
 
-### Stored schema (`data/prices.csv`)
+### Stored schema
 
 Every row is persisted with:
-
 - `timestamp` ISO-8601 UTC string.
 - `ticker` instrument symbol.
 - `open` numeric string.
@@ -104,11 +75,9 @@ Every row is persisted with:
 - `close` numeric string.
 - `volume` numeric string (may be empty before cleaning).
 
-Rows are upserted on the unique key `["timestamp", "ticker"]`.
-
 ### Runtime data model used for training
 
-When a model calls `load_dataset(run_id)`, AutoQuant converts `data/prices.csv` into a validated pandas DataFrame with this contract:
+When a model calls `load_dataset(run_id)`, AutoQuant loads prices into a validated pandas DataFrame with this contract:
 
 - Required columns: `timestamp`, `open`, `high`, `low`, `close`, `volume`.
 - Sorted ascending by `timestamp`.
@@ -118,13 +87,6 @@ When a model calls `load_dataset(run_id)`, AutoQuant converts `data/prices.csv` 
 
 Model scripts then build features and a single `target` column before splitting.
 
-
-### New Run 
-
-1. `init-run` with explicit settings and `--task classification|regression`.
-   - `--train-time-limit <minutes>` sets the hyperparameter search wall-clock budget per experiment.
-   - Default is `5` minutes.
-2. `prepare-data` to download training data
 
 ## Experiments metrics contract
 
@@ -216,13 +178,16 @@ You must at all costs:
 - Never write to Documents/autoquant directly. Use commands only. You only have READ access to your workspace outside of autoquant CLI.
 
 
-## OpenClaw Knowledge Placement
+## Bootstrapping - OpenClaw Knowledge Placement
 
-Keep OpenClaw knowledge split by responsibility so the system prompt stays clear and compact.
+Keep OpenClaw knowledge split by responsibility so the system prompt stays clear and compact. Save all necessary information to operate as outlined in the readme. 
+
+Compile any long-term, transferrable high-value knowledge into your memory.
+
 
 - `AGENTS.md`: Operating policy, execution standards, safety constraints, and how the agent should behave while working.
 - `TOOLS.md`: Command-line workflows and --help command, tool usage rules, and shell command conventions.
-- `IDENTITY.md`: Persona, role, repo url (https://github.com/dev0xx1/autoquant/tree/main), tone, and durable identity traits of the agent.
+- `IDENTITY.md`: Persona, role, repo url (https://github.com/dev0xx1/autoquant-cli/tree/main), tone, and durable identity traits of the agent.
 - `USER.md`: Stable user preferences and working style expectations.
 - `SOUL.md`: High-level mission and values that guide long-term decision style.
 

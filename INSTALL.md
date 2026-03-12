@@ -14,10 +14,22 @@ AUTOQUANT_WORKSPACE=$HOME/Documents/autoquant
 
 3. Install AutoQuant CLI
    ```bash
-   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install "git+https://github.com/dev0xx1/autoquant.git@main"
+   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/pip" install "git+https://github.com/dev0xx1/autoquant-cli.git@main"
    ```
 
-4. Verify env setup with status.
+4. Create a persistent shell launcher (one-time) so `autoquant` works in every new bash session without venv activation.
    ```bash
-   "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/autoquant" status
+   mkdir -p "$HOME/.local/bin"
+   cat > "$HOME/.local/bin/autoquant" << 'EOF'
+   #!/usr/bin/env bash
+   exec "$AUTOQUANT_WORKSPACE/venv/autoquant/bin/autoquant" "$@"
+   EOF
+   chmod +x "$HOME/.local/bin/autoquant"
+   grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+   source "$HOME/.bashrc"
+   ```
+
+5. Verify env setup with status.
+   ```bash
+   autoquant status
    ```
