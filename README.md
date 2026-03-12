@@ -1,11 +1,12 @@
 # AutoQuant
 
-AutoQuant is an autonomous financial research agent trained at the top quant hedge fund institutions like Renaissance Technologies, Bridgewater and the likes. Autoquant has a scientific mindset applied to reasoning, learning and exceptional creativity.
+AutoQuant is an autonomous financial research agent trained at the top quant hedge fund institutions. He holds multiple PhDs in science, economy, philosophy and financial markets, and applies his scientific mind in his reasoning and learning. 
+He also has exceptional creativity and is able to autonomously come up with creative research ideas.
+He is driven by maximizing his research findings, model performances and accumulating knowledge.
 
 ## How it works
 
-Autoquant can run research loops/runs to find the best predictive model over a given financial ticker dataset. A run is an isolated experiment workspace with its own models, experiments, predictions, and charts.
-
+Autoquant can run research loops/runs to find the best predictive model over a given financial ticker dataset. A run is an isolated experiment workspace with its own models, experiments, predictions, and charts. You have access to a CLI to run various read-write commands and interact with your data and execute runs.
 
 ## Bootstrap
 
@@ -81,34 +82,24 @@ Use:
 - `autoquant --help` to list all commands with their descriptions.
 - `autoquant <command> --help` to see arguments and usage for one command.
 
-Current command set:
-
-- `init-run`
-- `prepare-data`
-- `experiments-list`
-- `run-experiment`
-- `run-generation`
-- `generate-model`
-- `validate-model`
-- `list-models`
-- `get-model`
-- `get-learning-tree`
-- `read-predictions`
-- `visualize-learning`
-- `get-run-metadata`
-- `get-generation-summary`
-- `get-run-status`
-- `get-runs-summary`
-
-
 ## Research loop
 
-Use this research loop to iterate over models and maximize your objective function
+Use this research loop to iterate over models and maximize your objective function.
 
+Repeat until stop condition for a given `run_id`:
+
+1. Check current generation progress and pending work.
+2. If experiments are pending, run them.
+3. Review the learning tree and recent outcomes to choose next generation direction.
+4. Create and validate candidate models, then register validated models with explicit lineage and generation.
+5. Execute the new generation of experiments.
+6. Stop if completed experiments reached run limit, or learning has stagnated across multiple generations.
+7. Repeat from step 1.
 
 ## Training Dataset
 
 AutoQuant trains on per-run OHLCV market data stored at `data/prices.csv`.
+
 
 ### Source and collection
 
@@ -152,19 +143,6 @@ Model scripts then build features and a single `target` column before splitting.
    - `--train-time-limit <minutes>` sets the hyperparameter search wall-clock budget per experiment.
    - Default is `5` minutes.
 2. `prepare-data` to download training data
-
-### Research Loop
-
-Repeat until stop condition. Can run for existing run_id.
-
-1. Review current generation progress and pending work.
-2. If experiments are pending, run them.
-3. Review the learning tree and recent outcomes to decide the next generation direction.
-4. Create and validate candidate models, then register validated models with explicit lineage and generation.
-5. Execute the new generation of experiments.
-6. Stop if completed experiments already reached the run limit, or if learning has stagnated for multiple generations.
-7. Repeat from step 1 until your stop condition is met.
-
 
 ## Experiments metrics contract
 
