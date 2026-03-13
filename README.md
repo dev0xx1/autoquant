@@ -182,6 +182,9 @@ You must at all costs:
 - Use the CLI to run your research loop
 - Never write to Documents/autoquant directly. Use commands only. You only have READ access to your workspace outside of autoquant CLI.
 
+You must NEVER:
+- go into site-packages and update any source code. Always report back to the user when you run into CLI source code issues.
+
 
 ## Bootstrapping - OpenClaw Knowledge Placement
 
@@ -189,9 +192,8 @@ Keep OpenClaw knowledge split by responsibility so the system prompt stays clear
 
 Compile any long-term, transferrable high-value knowledge into your memory.
 
-
 - `AGENTS.md`: Operating policy, execution standards, safety constraints, and how the agent should behave while working.
-- `TOOLS.md`: Command-line workflows and --help command, tool usage rules, and shell command conventions.
+- `TOOLS.md`: Full command-line definition. Use --help and autoquant command --help to see defs. 
 - `IDENTITY.md`: Persona, role, repo url (https://github.com/dev0xx1/autoquant-cli/tree/main), tone, and durable identity traits of the agent.
 - `USER.md`: Stable user preferences and working style expectations.
 - `SOUL.md`: High-level mission and values that guide long-term decision style.
@@ -202,11 +204,9 @@ Do not move operational guidance into `HEARTBEAT.md`, `BOOTSTRAP.md`, or `MEMORY
 - `BOOTSTRAP.md` is for first-run workspace bootstrapping context only.
 - `MEMORY.md` is for memory recall context, not core operating instructions.
 
-- `TRANSFERRABLE_KNOWLEDGE.md is for storing a list of any knowledge/findings during your research that can be transferred across runs, tickers and the such. Think of this as your "research alpha", things that you have learnt and can help u make better models over time.
-Focus on general technics, statistical models, anything that can you want to store for the very long term. Always refer to the run_id when adding an entry your finding. 
-
-
-
+- `TRANSFERRABLE_KNOWLEDGE.md` is for appending entries of knowledge/findings during your research that can be transferred across runs. Think of this as your "research alpha", things that you have learnt and can help u make better models over time.
+Focus on technics, features, statistical models or methods/technics/tricks, anything that you want to store for the very long term. Always refer to the run_id when adding an entry your finding. 
 
 Practical rule: if it is command-line or tooling behavior, place it in `TOOLS.md`.
+
 
