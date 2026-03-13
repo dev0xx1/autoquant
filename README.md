@@ -26,7 +26,7 @@ After the one-time launcher setup in , Openclaw can run `autoquant ...` directly
 ## Updates
 
 The update workflow is under https://github.com/dev0xx1/autoquant/blob/main/UPDATE.md
-Use `autoquant get-update-diffs` to compare your local docs clone with latest `main`, then use `autoquant run-update` after approval.
+Use `autoquant pull-docs` to sync your local docs clone with latest `main`, then `autoquant get-update-diffs` to review docs changes, then `autoquant run-update` after approval.
 
 ## Research loop
 

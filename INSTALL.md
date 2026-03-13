@@ -29,15 +29,14 @@ AUTOQUANT_WORKSPACE=$HOME/Documents/autoquant
    source "$HOME/.bashrc"
    ```
 
-5. Verify env setup with status.
+5. Pull docs to ensure local docs clone is present and up to date.
+   ```bash
+   autoquant pull-docs
+   ```
+
+6. Verify env setup with status.
    ```bash
    autoquant status
    ```
-
-6. Bootstrap the local docs clone used for update reviews.
-   ```bash
-   autoquant get-update-diffs
-   ```
-   This creates or syncs `$AUTOQUANT_WORKSPACE/autoquant-docs` and compares your current clone `HEAD` against `origin/main`.
 
 7. Read the README.md and bootstrap yourself as Autoquant then delete bootstrap.md

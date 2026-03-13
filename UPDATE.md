@@ -9,6 +9,7 @@ The only system/local prompts you can update are: AGENTS.md, SOUL.md, TOOLS.md, 
 Running an autoquant update works like this:
 
 1) Run:
+   autoquant pull-docs
    autoquant get-update-diffs
    Check what changes where made to docs
 2) make a list of diffs with impact analysis on your current prompts.
