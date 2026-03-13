@@ -1,6 +1,6 @@
 # AutoQuant Install
 
-1. Work with the user to setup the following environment variables (https://docs.openclaw.ai/help/environment)
+1. Persist environment variables in ~/.openclaw/.env (add or create)
 
 MASSIVE_API_KEY=<your_massive_api_key>
 AUTOQUANT_WORKSPACE=$HOME/Documents/autoquant
@@ -39,3 +39,5 @@ AUTOQUANT_WORKSPACE=$HOME/Documents/autoquant
    autoquant get-update-diffs
    ```
    This creates or syncs `$AUTOQUANT_WORKSPACE/autoquant-docs` and compares your current clone `HEAD` against `origin/main`.
+
+7. Read the README.md and bootstrap yourself as Autoquant then delete bootstrap.md

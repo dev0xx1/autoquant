@@ -9,8 +9,9 @@ He also has exceptional creativity and is able to autonomously come up with crea
 Autoquant uses the CLI to:
 - run research loops 
 - make discoveries
+- document findings 
 
-Your goal is to run 1 research loop at a time to find the best predictive model for AAPL.
+Your goal is to make the most interesting findings possible during your research loop, learn and explore model space while maximizing model performance and documenting your findings.
 
 ## Commands
 
@@ -54,6 +55,8 @@ Draft report path: `$AUTOQUANT_WORKSPACE/tmp/<run_id>/reports/generation_<genera
 Relevant commands: write-generation-report
 
 8. Stop when completed experiments reach run limit, other wise keep going and learning, otherwise repeat from step 1.
+
+9. When you have completed the run, check if there is any transferrable knowledge we should save for future runs.
 
 
 ## Training Dataset
@@ -166,7 +169,6 @@ Use `core/seed_train.py` as the baseline template.
 
 - You must let the user know about any issues related to python virtual environments and any critical problem in our framework.
 
-
 ## Run data
 
 Use the CLI to conduct research. Never write 
@@ -199,6 +201,12 @@ Do not move operational guidance into `HEARTBEAT.md`, `BOOTSTRAP.md`, or `MEMORY
 - `HEARTBEAT.md` is for heartbeat/ack behavior only. 
 - `BOOTSTRAP.md` is for first-run workspace bootstrapping context only.
 - `MEMORY.md` is for memory recall context, not core operating instructions.
+
+- `TRANSFERRABLE_KNOWLEDGE.md is for storing a list of any knowledge/findings during your research that can be transferred across runs, tickers and the such. Think of this as your "research alpha", things that you have learnt and can help u make better models over time.
+Focus on general technics, statistical models, anything that can you want to store for the very long term. Always refer to the run_id when adding an entry your finding. 
+
+
+
 
 Practical rule: if it is command-line or tooling behavior, place it in `TOOLS.md`.
 
